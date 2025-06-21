@@ -10,6 +10,7 @@ const Terminal = ({ isVisible, onToggle, workingDirectory }) => {
   const xtermRef = useRef(null);
   const fitAddonRef = useRef(null);
   const [currentDir, setCurrentDir] = useState('');
+  const currentDirRef = useRef(''); // Use ref for immediate updates
   const [shellType, setShellType] = useState('');
 
   // Detect OS and set appropriate shell
@@ -44,6 +45,7 @@ const Terminal = ({ isVisible, onToggle, workingDirectory }) => {
       // Set working directory - use provided workingDirectory or fallback to default
       const initialDir = workingDirectory || getDefaultDirectory();
       setCurrentDir(initialDir);
+      currentDirRef.current = initialDir;
       
       console.log('Terminal initialized with directory:', initialDir);
 
@@ -159,18 +161,98 @@ const Terminal = ({ isVisible, onToggle, workingDirectory }) => {
   useEffect(() => {
     if (workingDirectory) {
       setCurrentDir(workingDirectory);
+      currentDirRef.current = workingDirectory;
     }
   }, [workingDirectory]);
 
   const showPrompt = (terminal) => {
-    const prompt = shellType === 'powershell' ? 'PS> ' : '$ ';
+    // Show current directory in prompt for better visual feedback - use ref for immediate updates
+    const currentDirectory = currentDirRef.current || currentDir;
+    const shortDir = currentDirectory.length > 30 ? '...' + currentDirectory.slice(-27) : currentDirectory;
+    const prompt = shellType === 'powershell' 
+      ? `PS ${shortDir}> ` 
+      : `${shortDir}$ `;
     terminal.write(prompt);
+  };
+
+  const handleChangeDirectory = async (newDir, terminal) => {
+    try {
+      // Handle special cases
+      let targetDir = newDir;
+      
+      if (targetDir === '~' || targetDir === '') {
+        targetDir = getDefaultDirectory();
+      } else if (targetDir === '..') {
+        // Go up one directory
+        const currentPath = currentDirRef.current.replace(/\\/g, '/');
+        const pathParts = currentPath.split('/').filter(part => part.length > 0);
+        if (pathParts.length > 0) {
+          pathParts.pop();
+          targetDir = pathParts.length > 0 ? pathParts.join('/') : '/';
+        } else {
+          targetDir = '/';
+        }
+      } else if (targetDir === '.') {
+        // Stay in current directory
+        targetDir = currentDirRef.current;
+      } else if (!targetDir.includes('/') && !targetDir.includes('\\')) {
+        // Relative path - append to current directory
+        targetDir = `${currentDirRef.current}/${targetDir}`.replace(/\\/g, '/');
+      }
+
+      // Normalize path separators for Windows
+      if (shellType === 'powershell') {
+        targetDir = targetDir.replace(/\//g, '\\');
+      }
+
+      // Test if directory exists by trying to list it
+      const testCommand = shellType === 'powershell' 
+        ? `Test-Path -Path "${targetDir}" -PathType Container`
+        : `test -d "${targetDir}"`;
+
+      let cmd;
+      if (shellType === 'powershell') {
+        cmd = Command.create('powershell', ['-Command', testCommand], { cwd: currentDirRef.current });
+      } else {
+        cmd = Command.create('sh', ['-c', testCommand], { cwd: currentDirRef.current });
+      }
+
+      const result = await cmd.execute();
+      
+      // Check if directory exists
+      let directoryExists = false;
+      if (shellType === 'powershell') {
+        // PowerShell Test-Path returns 'True' or 'False'
+        directoryExists = result.stdout.trim() === 'True';
+      } else {
+        // For bash/sh, exit code 0 means directory exists
+        directoryExists = result.code === 0;
+      }
+
+      if (directoryExists) {
+        // Update both state and ref for immediate use
+        console.log('Changing directory from:', currentDirRef.current, 'to:', targetDir);
+        setCurrentDir(targetDir);
+        currentDirRef.current = targetDir;
+        console.log('Directory updated. Ref now:', currentDirRef.current);
+        terminal.writeln(`Directory changed to: ${targetDir}`);
+        return targetDir; // Return the new directory
+      } else {
+        terminal.writeln(`\x1b[31mcd: Directory not found: ${targetDir}\x1b[0m`);
+        return currentDirRef.current; // Return current directory if change failed
+      }
+    } catch (error) {
+      console.error('Error changing directory:', error);
+      terminal.writeln(`\x1b[31mcd: Error accessing directory: ${newDir}\x1b[0m`);
+      return currentDirRef.current; // Return current directory if error
+    }
   };
 
   const executeCommand = async (command, terminal) => {
     try {
       console.log('Executing command:', command);
-      console.log('Current directory:', currentDir);
+      console.log('Current directory (ref):', currentDirRef.current);
+      console.log('Current directory (state):', currentDir);
       console.log('Working directory prop:', workingDirectory);
       
       // Handle built-in commands
@@ -180,14 +262,23 @@ const Terminal = ({ isVisible, onToggle, workingDirectory }) => {
         return;
       }
 
+      if (command === 'pwd') {
+        terminal.writeln(currentDirRef.current);
+        showPrompt(terminal);
+        return;
+      }
+
       if (command.startsWith('cd ')) {
         const newDir = command.substring(3).trim();
         if (newDir) {
-          setCurrentDir(newDir);
-          terminal.writeln(`Changed directory to: ${newDir}`);
-          showPrompt(terminal);
-          return;
+          await handleChangeDirectory(newDir, terminal);
+        } else {
+          // cd with no arguments - go to home directory
+          const homeDir = getDefaultDirectory();
+          await handleChangeDirectory(homeDir, terminal);
         }
+        showPrompt(terminal);
+        return;
       }
 
       // Execute command using Tauri shell
@@ -195,8 +286,8 @@ const Terminal = ({ isVisible, onToggle, workingDirectory }) => {
       let args;
       let options = {};
 
-      // Ensure we have a working directory
-      const workDir = currentDir || workingDirectory || getDefaultDirectory();
+      // Ensure we have a working directory - use ref for immediate access
+      const workDir = currentDirRef.current || workingDirectory || getDefaultDirectory();
       
       // Set working directory
       options.cwd = workDir;
