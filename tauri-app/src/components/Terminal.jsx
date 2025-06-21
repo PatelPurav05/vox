@@ -9,7 +9,7 @@ const Terminal = ({ isVisible, onToggle, workingDirectory }) => {
   const terminalRef = useRef(null);
   const xtermRef = useRef(null);
   const fitAddonRef = useRef(null);
-  const [currentDir, setCurrentDir] = useState(workingDirectory || '');
+  const [currentDir, setCurrentDir] = useState('');
   const [shellType, setShellType] = useState('');
 
   // Detect OS and set appropriate shell
@@ -24,10 +24,24 @@ const Terminal = ({ isVisible, onToggle, workingDirectory }) => {
     }
   };
 
+  // Get default directory based on OS
+  const getDefaultDirectory = () => {
+    const platform = navigator.platform.toLowerCase();
+    if (platform.includes('win')) {
+      return process.env.USERPROFILE || 'C:\\Users\\' + process.env.USERNAME || 'C:\\';
+    } else {
+      return process.env.HOME || '~/';
+    }
+  };
+
   useEffect(() => {
     if (isVisible && terminalRef.current && !xtermRef.current) {
       const detectedShell = detectShell();
       setShellType(detectedShell);
+
+      // Set working directory - use provided workingDirectory or fallback to default
+      const initialDir = workingDirectory || getDefaultDirectory();
+      setCurrentDir(initialDir);
 
       // Create terminal instance
       const terminal = new XTerm({
@@ -77,6 +91,7 @@ const Terminal = ({ isVisible, onToggle, workingDirectory }) => {
       // Welcome message
       terminal.writeln(`Vox IDE Terminal - ${detectedShell.toUpperCase()}`);
       terminal.writeln('Connected to system shell');
+      terminal.writeln(`Working directory: ${initialDir}`);
       terminal.writeln('');
       
       // Show initial prompt
@@ -133,6 +148,13 @@ const Terminal = ({ isVisible, onToggle, workingDirectory }) => {
       };
     }
   }, [isVisible]);
+
+  // Update working directory when workingDirectory prop changes
+  useEffect(() => {
+    if (workingDirectory) {
+      setCurrentDir(workingDirectory);
+    }
+  }, [workingDirectory]);
 
   const showPrompt = (terminal) => {
     const prompt = shellType === 'powershell' ? 'PS> ' : '$ ';
