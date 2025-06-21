@@ -3,7 +3,7 @@ import { open } from '@tauri-apps/plugin-dialog'
 import { readDir, exists } from '@tauri-apps/plugin-fs'
 import './FileExplorer.css'
 
-const FileExplorer = ({ onFileSelect, onRootPathChange, currentFile }) => {
+const FileExplorer = ({ onFileSelect, onRootPathChange, onContextMenu, currentFile }) => {
   const [rootPath, setRootPath] = useState(null)
   const [fileTree, setFileTree] = useState([])
   const [expandedDirs, setExpandedDirs] = useState(new Set())
@@ -261,6 +261,7 @@ const FileExplorer = ({ onFileSelect, onRootPathChange, currentFile }) => {
             className={`tree-item ${item.path === currentFile ? 'selected' : ''} ${isLoadingThisDir ? 'loading' : ''}`}
             style={{ paddingLeft: `${level * 20 + 10}px` }}
             onClick={() => handleItemClick(item)}
+            onContextMenu={(e) => onContextMenu && onContextMenu(e, item.isDirectory ? item.path : item.path.substring(0, item.path.lastIndexOf('/')), item.isDirectory)}
           >
             {item.isDirectory && (
               <span className="tree-toggle">

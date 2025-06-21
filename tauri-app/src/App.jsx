@@ -1,7 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react'
 import Editor from '@monaco-editor/react'
 import FileExplorer from './components/FileExplorer'
-import { readTextFile, writeTextFile, exists } from '@tauri-apps/plugin-fs'
+import { readTextFile, writeTextFile, exists, create, mkdir, remove, rename } from '@tauri-apps/plugin-fs'
+import { open } from '@tauri-apps/plugin-dialog'
+import Terminal from './components/Terminal'
+import ContextMenu from './components/ContextMenu'
 import './App.css'
 
 function App() {
@@ -15,6 +18,16 @@ function App() {
   const [debugPanelWidth, setDebugPanelWidth] = useState(300)
   const [sidebarWidth, setSidebarWidth] = useState(250)
   const autoSaveTimeoutRef = useRef(null)
+  const [isTerminalVisible, setIsTerminalVisible] = useState(false)
+  const [contextMenu, setContextMenu] = useState({
+    isVisible: false,
+    position: { x: 0, y: 0 },
+    targetPath: null,
+    isDirectory: false
+  })
+
+  const sidebarRef = useRef(null)
+  const debugRef = useRef(null)
 
   // Simple debug logging function without console override
   const addDebugLog = (message, type = 'info') => {
@@ -158,6 +171,10 @@ function App() {
       event.preventDefault()
       setShowDebug(!showDebug)
     }
+    if (event.ctrlKey && event.key === '`') {
+      event.preventDefault()
+      setIsTerminalVisible(!isTerminalVisible)
+    }
   }
 
   useEffect(() => {
@@ -166,6 +183,113 @@ function App() {
       document.removeEventListener('keydown', handleKeyDown)
     }
   }, [currentFile, fileContent, unsavedChanges])
+
+  // Context menu handlers
+  const handleContextMenu = (event, targetPath, isDirectory) => {
+    event.preventDefault()
+    setContextMenu({
+      isVisible: true,
+      position: { x: event.clientX, y: event.clientY },
+      targetPath,
+      isDirectory
+    })
+  }
+
+  const handleCreateFile = async (targetPath) => {
+    const fileName = prompt('Enter file name:')
+    if (!fileName) return
+
+    try {
+      const filePath = `${targetPath}/${fileName}`.replace(/\\/g, '/')
+      
+      // Create the file using Tauri's create function
+      await create(filePath)
+      addDebugLog(`Created file: ${filePath}`)
+      
+      // Refresh the file explorer by updating the root path
+      if (rootPath) {
+        setRootPath(rootPath + '') // Trigger re-render
+      }
+    } catch (error) {
+      addDebugLog(`Error creating file: ${error.message}`, 'error')
+      alert(`Error creating file: ${error.message}`)
+    }
+  }
+
+  const handleCreateFolder = async (targetPath) => {
+    const folderName = prompt('Enter folder name:')
+    if (!folderName) return
+
+    try {
+      const folderPath = `${targetPath}/${folderName}`.replace(/\\/g, '/')
+      
+      // Create the directory using Tauri's mkdir function
+      await mkdir(folderPath, { recursive: true })
+      addDebugLog(`Created folder: ${folderPath}`)
+      
+      // Refresh the file explorer
+      if (rootPath) {
+        setRootPath(rootPath + '') // Trigger re-render
+      }
+    } catch (error) {
+      addDebugLog(`Error creating folder: ${error.message}`, 'error')
+      alert(`Error creating folder: ${error.message}`)
+    }
+  }
+
+  const handleDelete = async (targetPath) => {
+    const itemName = targetPath.split('/').pop() || targetPath.split('\\').pop()
+    if (!confirm(`Are you sure you want to delete "${itemName}"?`)) return
+
+    try {
+      // Use Tauri's remove function
+      await remove(targetPath, { recursive: true })
+      addDebugLog(`Deleted: ${targetPath}`)
+      
+      // If the deleted file was currently open, close it
+      if (currentFile === targetPath) {
+        setCurrentFile(null)
+        setFileContent('')
+        setUnsavedChanges(false)
+      }
+      
+      // Refresh the file explorer
+      if (rootPath) {
+        setRootPath(rootPath + '') // Trigger re-render
+      }
+    } catch (error) {
+      addDebugLog(`Error deleting: ${error.message}`, 'error')
+      alert(`Error deleting: ${error.message}`)
+    }
+  }
+
+  const handleRename = async (targetPath) => {
+    const currentName = targetPath.split('/').pop() || targetPath.split('\\').pop()
+    const newName = prompt('Enter new name:', currentName)
+    if (!newName || newName === currentName) return
+
+    try {
+      const parentPath = targetPath.substring(0, targetPath.lastIndexOf('/'))
+      const newPath = `${parentPath}/${newName}`.replace(/\\/g, '/')
+      
+      // Use Tauri's rename function
+      await rename(targetPath, newPath)
+      addDebugLog(`Renamed: ${targetPath} -> ${newPath}`)
+      
+      // If the renamed file was currently open, update the current file path
+      if (currentFile === targetPath) {
+        setCurrentFile(newPath)
+      }
+      
+      // Refresh the file explorer
+      if (rootPath) {
+        setRootPath(rootPath + '') // Trigger re-render
+      }
+    } catch (error) {
+      addDebugLog(`Error renaming: ${error.message}`, 'error')
+      alert(`Error renaming: ${error.message}`)
+    }
+  }
 
   const getLanguageFromFilename = (filename) => {
     const extension = filename.split('.').pop()?.toLowerCase()
@@ -217,88 +341,104 @@ function App() {
 
   return (
     <div className="app">
-      <div 
-        className="sidebar" 
-        style={{ width: `${sidebarWidth}px` }}
-      >
-        <FileExplorer 
-          onFileSelect={handleFileSelect}
-          onRootPathChange={setRootPath}
-          currentFile={currentFile}
-        />
+      <div className="app-header">
+        <h1>Vox IDE</h1>
+        <div className="header-controls">
+          <button 
+            onClick={() => setIsTerminalVisible(!isTerminalVisible)}
+            className={`header-button ${isTerminalVisible ? 'active' : ''}`}
+            title="Toggle Terminal (Ctrl+`)"
+          >
+            Terminal
+          </button>
+          <button 
+            onClick={() => setShowDebug(!showDebug)}
+            className={`header-button ${showDebug ? 'active' : ''}`}
+            title="Toggle Debug Panel (Ctrl+Shift+D)"
+          >
+            Debug
+          </button>
+        </div>
       </div>
       
-      <div 
-        className="sidebar-resizer"
-        onMouseDown={handleSidebarResize}
-      ></div>
-      
-      <div className="main-content">
-        <div className="editor-container">
-          <div className="editor-header">
-            <div className="file-info">
-              {currentFile && (
-                <>
-                  <span className="file-name">
-                    {currentFile.split('/').pop() || currentFile.split('\\').pop()}
-                  </span>
-                  {unsavedChanges && <span className="unsaved-indicator">●</span>}
-                </>
-              )}
+      <div className="app-content">
+        <div 
+          className="sidebar" 
+          ref={sidebarRef}
+          style={{ width: sidebarWidth, flexShrink: 0 }}
+        >
+          <FileExplorer 
+            onFileSelect={handleFileSelect}
+            onRootPathChange={setRootPath}
+            onContextMenu={handleContextMenu}
+            currentFile={currentFile}
+          />
+        </div>
+        
+        <div 
+          className="sidebar-resizer"
+          onMouseDown={handleSidebarResize}
+        ></div>
+        
+        <div className="main-content">
+          <div className="editor-container">
+            <div className="editor-header">
+              <div className="file-info">
+                {currentFile && (
+                  <>
+                    <span className="file-name">
+                      {currentFile.split('/').pop() || currentFile.split('\\').pop()}
+                    </span>
+                    {unsavedChanges && <span className="unsaved-indicator">●</span>}
+                  </>
+                )}
+              </div>
+              <div className="status-bar">
+                {isAutoSaving && <span className="auto-save-indicator">Auto-saving...</span>}
+                {!isAutoSaving && unsavedChanges && <span className="changes-indicator">Unsaved changes</span>}
+              </div>
             </div>
-            <div className="status-bar">
-              {isAutoSaving && <span className="auto-save-indicator">Auto-saving...</span>}
-              {!isAutoSaving && unsavedChanges && <span className="changes-indicator">Unsaved changes</span>}
-              <button 
-                onClick={() => setShowDebug(!showDebug)}
-                className="debug-toggle"
-                title="Toggle Debug Panel (Ctrl+Shift+D)"
-              >
-                🐛
-              </button>
+            
+            <div className="editor-wrapper">
+              {currentFile ? (
+                <Editor
+                  height="100%"
+                  language={getLanguageFromFilename(currentFile)}
+                  value={fileContent}
+                  onChange={handleEditorChange}
+                  theme="vs-dark"
+                  options={{
+                    minimap: { enabled: false },
+                    fontSize: 14,
+                    wordWrap: 'on',
+                    automaticLayout: true,
+                    scrollBeyondLastLine: false,
+                    renderWhitespace: 'selection',
+                    tabSize: 2,
+                    insertSpaces: true,
+                  }}
+                />
+              ) : (
+                <div className="no-file-selected">
+                  <h2>Welcome to Vox IDE</h2>
+                  <p>Select a folder from the file explorer to get started.</p>
+                  <p>Press <kbd>Ctrl+Shift+D</kbd> to toggle debug panel</p>
+                </div>
+              )}
             </div>
           </div>
           
-          <div className="editor-wrapper">
-            {currentFile ? (
-              <Editor
-                height="100%"
-                language={getLanguageFromFilename(currentFile)}
-                value={fileContent}
-                onChange={handleEditorChange}
-                theme="vs-dark"
-                options={{
-                  minimap: { enabled: false },
-                  fontSize: 14,
-                  wordWrap: 'on',
-                  automaticLayout: true,
-                  scrollBeyondLastLine: false,
-                  renderWhitespace: 'selection',
-                  tabSize: 2,
-                  insertSpaces: true,
-                }}
-              />
-            ) : (
-              <div className="no-file-selected">
-                <h2>Welcome to Vox IDE</h2>
-                <p>Select a folder from the file explorer to get started.</p>
-                <p>Press <kbd>Ctrl+Shift+D</kbd> to toggle debug panel</p>
-              </div>
-            )}
-          </div>
-        </div>
-        
-        {showDebug && (
-          <>
-            <div 
-              className="debug-resizer"
-              onMouseDown={handleDebugResize}
-            ></div>
-            <div 
-              className="debug-panel"
-              style={{ width: `${debugPanelWidth}px` }}
-            >
-              <div className="debug-content">
+          {showDebug && (
+            <>
+              <div 
+                className="debug-resizer"
+                onMouseDown={handleDebugResize}
+              ></div>
+              <div 
+                className="debug-panel"
+                ref={debugRef}
+                style={{ width: debugPanelWidth, flexShrink: 0 }}
+              >
                 <div className="debug-header">
                   <h3>Debug Console</h3>
                   <button onClick={() => setDebugLogs([])} className="clear-logs">Clear</button>
@@ -312,10 +452,28 @@ function App() {
                   ))}
                 </div>
               </div>
-            </div>
-          </>
-        )}
+            </>
+          )}
+        </div>
       </div>
+
+      <Terminal 
+        isVisible={isTerminalVisible}
+        onToggle={() => setIsTerminalVisible(!isTerminalVisible)}
+        workingDirectory={rootPath}
+      />
+
+      <ContextMenu
+        isVisible={contextMenu.isVisible}
+        position={contextMenu.position}
+        onClose={() => setContextMenu(prev => ({ ...prev, isVisible: false }))}
+        onCreateFile={handleCreateFile}
+        onCreateFolder={handleCreateFolder}
+        onDelete={handleDelete}
+        onRename={handleRename}
+        targetPath={contextMenu.targetPath}
+        isDirectory={contextMenu.isDirectory}
+      />
     </div>
   )
 }

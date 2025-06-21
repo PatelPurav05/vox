@@ -1,5 +1,6 @@
 .app {
   display: flex;
+  flex-direction: column;
   height: 100vh;
   width: 100vw;
   background-color: #1e1e1e;
@@ -7,6 +8,57 @@
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
     'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
     sans-serif;
+  overflow: hidden;
+}
+
+.app-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 40px;
+  background-color: #2d2d30;
+  border-bottom: 1px solid #3c3c3c;
+  padding: 0 16px;
+  flex-shrink: 0;
+}
+
+.app-header h1 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 500;
+  color: #cccccc;
+}
+
+.header-controls {
+  display: flex;
+  gap: 8px;
+}
+
+.header-button {
+  background: none;
+  border: none;
+  color: #cccccc;
+  padding: 6px 12px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background-color 0.2s;
+}
+
+.header-button:hover {
+  background-color: #3c3c3c;
+}
+
+.header-button.active {
+  background-color: #094771;
+  color: #ffffff;
+}
+
+.app-content {
+  flex: 1;
+  display: flex;
+  flex-direction: row;
+  min-height: 0;
   overflow: hidden;
 }
 
