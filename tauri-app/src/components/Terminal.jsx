@@ -28,9 +28,11 @@ const Terminal = ({ isVisible, onToggle, workingDirectory }) => {
   const getDefaultDirectory = () => {
     const platform = navigator.platform.toLowerCase();
     if (platform.includes('win')) {
-      return process.env.USERPROFILE || 'C:\\Users\\' + process.env.USERNAME || 'C:\\';
+      // For Windows, default to user profile directory
+      return '%USERPROFILE%';
     } else {
-      return process.env.HOME || '~/';
+      // For Unix-like systems (Mac, Linux), default to home directory
+      return '~';
     }
   };
 
@@ -42,6 +44,8 @@ const Terminal = ({ isVisible, onToggle, workingDirectory }) => {
       // Set working directory - use provided workingDirectory or fallback to default
       const initialDir = workingDirectory || getDefaultDirectory();
       setCurrentDir(initialDir);
+      
+      console.log('Terminal initialized with directory:', initialDir);
 
       // Create terminal instance
       const terminal = new XTerm({
@@ -94,8 +98,10 @@ const Terminal = ({ isVisible, onToggle, workingDirectory }) => {
       terminal.writeln(`Working directory: ${initialDir}`);
       terminal.writeln('');
       
-      // Show initial prompt
-      showPrompt(terminal);
+      // Show initial prompt with a small delay to ensure everything is ready
+      setTimeout(() => {
+        showPrompt(terminal);
+      }, 100);
 
       // Handle input
       let currentLine = '';
@@ -163,6 +169,10 @@ const Terminal = ({ isVisible, onToggle, workingDirectory }) => {
 
   const executeCommand = async (command, terminal) => {
     try {
+      console.log('Executing command:', command);
+      console.log('Current directory:', currentDir);
+      console.log('Working directory prop:', workingDirectory);
+      
       // Handle built-in commands
       if (command === 'clear' || command === 'cls') {
         terminal.clear();
@@ -174,6 +184,9 @@ const Terminal = ({ isVisible, onToggle, workingDirectory }) => {
         const newDir = command.substring(3).trim();
         if (newDir) {
           setCurrentDir(newDir);
+          terminal.writeln(`Changed directory to: ${newDir}`);
+          showPrompt(terminal);
+          return;
         }
       }
 
@@ -182,14 +195,18 @@ const Terminal = ({ isVisible, onToggle, workingDirectory }) => {
       let args;
       let options = {};
 
-      // Set working directory if available
-      if (currentDir) {
-        options.cwd = currentDir;
-      }
+      // Ensure we have a working directory
+      const workDir = currentDir || workingDirectory || getDefaultDirectory();
+      
+      // Set working directory
+      options.cwd = workDir;
+      
+      // Ensure we have a shell type set
+      const currentShell = shellType || detectShell();
 
-      if (shellType === 'powershell') {
+      if (currentShell === 'powershell') {
         cmd = Command.create('powershell', ['-Command', command], options);
-      } else if (shellType === 'cmd') {
+      } else if (currentShell === 'cmd') {
         cmd = Command.create('cmd', ['/C', command], options);
       } else {
         // Default to sh for bash/zsh/other shells
@@ -219,12 +236,27 @@ const Terminal = ({ isVisible, onToggle, workingDirectory }) => {
       }
 
       showPrompt(terminal);
-    } catch (error) {
-      console.error('Shell command error:', error);
-      terminal.writeln(`\x1b[31mError: ${error.message || 'Command execution failed'}\x1b[0m`);
-      showPrompt(terminal);
-    }
-  };
+          } catch (error) {
+        console.error('Shell command error:', error);
+        console.error('Working directory was:', workDir);
+        console.error('Shell type was:', shellType);
+        
+        // More detailed error message
+        let errorMessage = 'Command execution failed';
+        if (error.message) {
+          if (error.message.includes('No such file or directory')) {
+            errorMessage = `Directory not found: ${workDir}`;
+          } else if (error.message.includes('permission')) {
+            errorMessage = `Permission denied. Check directory access: ${workDir}`;
+          } else {
+            errorMessage = error.message;
+          }
+        }
+        
+        terminal.writeln(`\x1b[31mError: ${errorMessage}\x1b[0m`);
+        showPrompt(terminal);
+      }
+    };
 
   if (!isVisible) return null;
 
