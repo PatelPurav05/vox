@@ -5,6 +5,7 @@ import { readTextFile, writeTextFile, exists, create, mkdir, remove, rename } fr
 import { open } from '@tauri-apps/plugin-dialog'
 import Terminal from './components/Terminal'
 import ContextMenu from './components/ContextMenu'
+import NewFileDialog from './components/NewFileDialog'
 import './App.css'
 
 function App() {
@@ -14,6 +15,7 @@ function App() {
   const [isAutoSaving, setIsAutoSaving] = useState(false)
   const [rootPath, setRootPath] = useState(null)
   const [showDebug, setShowDebug] = useState(false)
+  const [fileTreeRefresh, setFileTreeRefresh] = useState(0)
   const [debugLogs, setDebugLogs] = useState([])
   const [debugPanelWidth, setDebugPanelWidth] = useState(300)
   const [sidebarWidth, setSidebarWidth] = useState(250)
@@ -24,6 +26,10 @@ function App() {
     position: { x: 0, y: 0 },
     targetPath: null,
     isDirectory: false
+  })
+  const [newFileDialog, setNewFileDialog] = useState({
+    isVisible: false,
+    targetPath: null
   })
 
   const sidebarRef = useRef(null)
@@ -195,21 +201,30 @@ function App() {
     })
   }
 
-  const handleCreateFile = async (targetPath) => {
-    const fileName = prompt('Enter file name:')
-    if (!fileName) return
+  const handleCreateFile = (targetPath) => {
+    setNewFileDialog({
+      isVisible: true,
+      targetPath: targetPath
+    })
+  }
 
+  const handleCreateFileWithContent = async (filePath, content = '') => {
     try {
-      const filePath = `${targetPath}/${fileName}`.replace(/\\/g, '/')
-      
       // Create the file using Tauri's create function
       await create(filePath)
+      
+      // If there's content, write it to the file
+      if (content) {
+        await writeTextFile(filePath, content)
+      }
+      
       addDebugLog(`Created file: ${filePath}`)
       
-      // Refresh the file explorer by updating the root path
-      if (rootPath) {
-        setRootPath(rootPath + '') // Trigger re-render
-      }
+      // Refresh the file explorer
+      setFileTreeRefresh(prev => prev + 1)
+      
+      // Automatically open the new file
+      await handleFileSelect(filePath)
     } catch (error) {
       addDebugLog(`Error creating file: ${error.message}`, 'error')
       alert(`Error creating file: ${error.message}`)
@@ -228,9 +243,7 @@ function App() {
       addDebugLog(`Created folder: ${folderPath}`)
       
       // Refresh the file explorer
-      if (rootPath) {
-        setRootPath(rootPath + '') // Trigger re-render
-      }
+      setFileTreeRefresh(prev => prev + 1)
     } catch (error) {
       addDebugLog(`Error creating folder: ${error.message}`, 'error')
       alert(`Error creating folder: ${error.message}`)
@@ -254,9 +267,7 @@ function App() {
       }
       
       // Refresh the file explorer
-      if (rootPath) {
-        setRootPath(rootPath + '') // Trigger re-render
-      }
+      setFileTreeRefresh(prev => prev + 1)
     } catch (error) {
       addDebugLog(`Error deleting: ${error.message}`, 'error')
       alert(`Error deleting: ${error.message}`)
@@ -282,9 +293,7 @@ function App() {
       }
       
       // Refresh the file explorer
-      if (rootPath) {
-        setRootPath(rootPath + '') // Trigger re-render
-      }
+      setFileTreeRefresh(prev => prev + 1)
     } catch (error) {
       addDebugLog(`Error renaming: ${error.message}`, 'error')
       alert(`Error renaming: ${error.message}`)
@@ -372,6 +381,7 @@ function App() {
             onRootPathChange={setRootPath}
             onContextMenu={handleContextMenu}
             currentFile={currentFile}
+            refreshTrigger={fileTreeRefresh}
           />
         </div>
         
@@ -473,6 +483,13 @@ function App() {
         onRename={handleRename}
         targetPath={contextMenu.targetPath}
         isDirectory={contextMenu.isDirectory}
+      />
+
+      <NewFileDialog
+        isVisible={newFileDialog.isVisible}
+        onClose={() => setNewFileDialog(prev => ({ ...prev, isVisible: false }))}
+        onCreateFile={handleCreateFileWithContent}
+        targetPath={newFileDialog.targetPath}
       />
     </div>
   )
