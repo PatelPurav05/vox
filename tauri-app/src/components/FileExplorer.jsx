@@ -3,7 +3,7 @@ import { open } from '@tauri-apps/plugin-dialog'
 import { readDir, exists } from '@tauri-apps/plugin-fs'
 import './FileExplorer.css'
 
-const FileExplorer = forwardRef(({ onFileSelect, onRootPathChange, onContextMenu, currentFile, refreshTrigger }, ref) => {
+const FileExplorer = forwardRef(({ onFileSelect, onRootPathChange, onContextMenu, currentFile, refreshTrigger, isDarkMode }, ref) => {
   const [rootPath, setRootPath] = useState(null)
   const [fileTree, setFileTree] = useState([])
   const [expandedDirs, setExpandedDirs] = useState(new Set())

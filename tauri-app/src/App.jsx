@@ -949,6 +949,7 @@ function App() {
             onContextMenu={handleContextMenu}
             currentFile={currentFile}
             refreshTrigger={fileTreeRefresh}
+            isDarkMode={isDarkMode}
           />
         </div>
         
