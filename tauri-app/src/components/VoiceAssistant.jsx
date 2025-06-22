@@ -393,8 +393,11 @@ const VoiceAssistant = ({ editor }) => {
       case 'voiceResponse':
         // Handle voice-only responses
         showStatus(`🗣️ ${action.response.substring(0, 50)}...`);
-        if (action.shouldSpeak) {
+        // Disable local TTS when VAPI is active to prevent feedback loops
+        if (action.shouldSpeak && !isListening) {
           await speakText(action.response);
+        } else if (isListening) {
+          console.log('🔇 Skipping TTS - VAPI is active (preventing feedback loop)');
         }
         break;
 

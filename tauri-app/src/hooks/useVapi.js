@@ -35,7 +35,26 @@ const useVapi = (publicKey, assistantId) => {
         if (message.type === 'transcript') {
           if (message.role === 'user') {
             console.log('👤 User said:', message.transcript);
-            setTranscript(message.transcript);
+            // Filter out common assistant greetings to prevent feedback loops
+            const assistantGreetings = [
+              'hello how may i help you',
+              'hello, how may i help you',
+              'how can i help you',
+              'how may i assist you',
+              'hello i\'m here to help',
+              'hello! i\'m here to help you with coding'
+            ];
+            
+            const transcript = message.transcript.toLowerCase().trim();
+            const isAssistantGreeting = assistantGreetings.some(greeting => 
+              transcript.includes(greeting) || greeting.includes(transcript)
+            );
+            
+            if (!isAssistantGreeting) {
+              setTranscript(message.transcript);
+            } else {
+              console.log('🚫 Filtered out assistant greeting to prevent loop:', transcript);
+            }
           } else if (message.role === 'assistant') {
             console.log('🤖 Assistant said:', message.transcript);
           }
