@@ -213,12 +213,32 @@ const useVapi = (publicKey, assistantId) => {
     }
   };
 
+  // Method to speak text through VAPI TTS
+  const speakWithVapi = useCallback(async (text) => {
+    if (!vapiRef.current || !isListening) {
+      console.warn('⚠️ VAPI not active, cannot speak:', text);
+      return false;
+    }
+
+    try {
+      console.log('🗣️ Speaking with VAPI:', text);
+      
+      // Send a say message to VAPI to speak the text
+      await vapiRef.current.say(text);
+      return true;
+    } catch (err) {
+      console.error('❌ Error speaking with VAPI:', err);
+      return false;
+    }
+  }, [isListening]);
+
   return {
     isListening,
     transcript,
     error,
     toggleListening,
-    testAudioCapture
+    testAudioCapture,
+    speakWithVapi
   };
 };
 

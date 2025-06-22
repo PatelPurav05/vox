@@ -83,7 +83,7 @@ const VoiceAssistant = ({ editor, fileExplorerRef, onToggleTerminal, isTerminalV
     };
   }, [editor]);
 
-  const { isListening, transcript, error, toggleListening, testAudioCapture } = useVapi(vapiKey, assistantId);
+  const { isListening, transcript, error, toggleListening, testAudioCapture, speakWithVapi } = useVapi(vapiKey, assistantId);
 
   // Get rich editor context
   const getEditorContext = () => {
@@ -156,9 +156,20 @@ const VoiceAssistant = ({ editor, fileExplorerRef, onToggleTerminal, isTerminalV
     }
   }, [transcript, isProcessing]);
 
-  // Text-to-speech functionality
-  const speakText = (text) => {
-    return new Promise((resolve) => {
+  // Text-to-speech functionality with VAPI integration
+  const speakText = async (text, forceLocal = false) => {
+    return new Promise(async (resolve) => {
+      // When VAPI is active, use VAPI TTS for status messages unless forced to use local
+      if (isListening && !forceLocal && speakWithVapi) {
+        console.log('🗣️ Using VAPI TTS for status:', text);
+        const success = await speakWithVapi(text);
+        if (success) {
+          resolve();
+          return;
+        }
+        console.log('⚠️ VAPI TTS failed, falling back to local TTS');
+      }
+
       // Cancel any existing speech
       if (speechSynthesisRef.current) {
         speechSynthesis.cancel();
@@ -863,11 +874,20 @@ const VoiceAssistant = ({ editor, fileExplorerRef, onToggleTerminal, isTerminalV
       case 'voiceResponse':
         // Handle voice-only responses
         showStatus(`🗣️ ${action.response.substring(0, 50)}...`);
-        // Disable local TTS when VAPI is active to prevent feedback loops
-        if (action.shouldSpeak && !isListening) {
-          await speakText(action.response);
-        } else if (isListening) {
-          console.log('🔇 Skipping TTS - VAPI is active (preventing feedback loop)');
+        
+        // Use VAPI TTS if active, otherwise use local TTS
+        if (action.shouldSpeak) {
+          if (isListening && speakWithVapi) {
+            // Use VAPI TTS when VAPI is active - this is Gemini's exact response
+            const success = await speakWithVapi(action.response);
+            if (!success) {
+              console.log('⚠️ VAPI TTS failed, falling back to local TTS');
+              await speakText(action.response, true); // Force local TTS as fallback
+            }
+          } else {
+            // Use local TTS when VAPI is not active
+            await speakText(action.response, true); // Force local TTS
+          }
         }
         break;
 
