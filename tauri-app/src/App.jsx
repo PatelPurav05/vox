@@ -36,6 +36,7 @@ function App() {
 
   const sidebarRef = useRef(null)
   const debugRef = useRef(null)
+  const fileExplorerRef = useRef(null)
 
   // Simple debug logging function without console override
   const addDebugLog = (message, type = 'info') => {
@@ -379,6 +380,7 @@ function App() {
           style={{ width: sidebarWidth, flexShrink: 0 }}
         >
           <FileExplorer 
+            ref={fileExplorerRef}
             onFileSelect={handleFileSelect}
             onRootPathChange={setRootPath}
             onContextMenu={handleContextMenu}
@@ -495,7 +497,7 @@ function App() {
         targetPath={newFileDialog.targetPath}
       />
 
-      <VoiceAssistant editor={editorInstance} />
+      <VoiceAssistant editor={editorInstance} fileExplorerRef={fileExplorerRef} />
     </div>
   )
 }

@@ -189,10 +189,23 @@ Available actions:
   "description": "moved lines"
 }
 
+{
+  "action": "undo",
+  "description": "undid last change"
+}
+
+{
+  "action": "redo",
+  "description": "redid last change"
+}
+
 Examples:
 - "delete line 5" → deleteLines with startLine: 5, endLine: 5
 - "replace this function" → replaceCode with improved version
 - "add a print statement here" → insertAt with print code
+- "undo" → undo last change
+- "redo" → redo last change
+- "undo that" → undo last change
 
 Do exactly what's requested.`;
 
@@ -275,6 +288,38 @@ Available actions:
   "description": "cleared search results"
 }
 
+{
+  "action": "undo",
+  "description": "undid last action"
+}
+
+{
+  "action": "redo",
+  "description": "redid last action"
+}
+
+{
+  "action": "openFolder",
+  "description": "opened folder dialog"
+}
+
+{
+  "action": "openFile",
+  "fileName": "filename.ext",
+  "description": "opened file in editor"
+}
+
+{
+  "action": "expandDirectory",
+  "directoryName": "folder name",
+  "description": "expanded directory in explorer"
+}
+
+{
+  "action": "refreshExplorer",
+  "description": "refreshed file explorer"
+}
+
 Examples:
 - "go to line 42" → goToLine with line: 42
 - "move up 5 lines" → moveCursor with direction: "up", count: 5
@@ -288,6 +333,20 @@ Examples:
 - "clear search" → clearSearch
 - "clear search results" → clearSearch
 - "hide search results" → clearSearch
+- "undo" → undo
+- "undo that" → undo
+- "undo last change" → undo
+- "redo" → redo
+- "redo that" → redo
+- "redo last action" → redo
+- "open folder" → openFolder
+- "select folder" → openFolder
+- "open file main.py" → openFile with fileName: "main.py"
+- "open the config file" → openFile with fileName: "config"
+- "expand src folder" → expandDirectory with directoryName: "src"
+- "expand components directory" → expandDirectory with directoryName: "components"
+- "refresh explorer" → refreshExplorer
+- "refresh file tree" → refreshExplorer
 
 Parse the request and return the appropriate navigation action.`;
 

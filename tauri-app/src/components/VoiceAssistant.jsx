@@ -3,7 +3,7 @@ import useVapi from '../hooks/useVapi';
 import GeminiService from '../services/geminiService';
 import './VoiceAssistant.css';
 
-const VoiceAssistant = ({ editor }) => {
+const VoiceAssistant = ({ editor, fileExplorerRef }) => {
   const [vapiKey, setVapiKey] = useState('');
   const [assistantId, setAssistantId] = useState('');
   const [geminiKey, setGeminiKey] = useState('');
@@ -623,6 +623,86 @@ const VoiceAssistant = ({ editor }) => {
     }
   };
 
+  // File Explorer interactions
+  const openFolderDialog = () => {
+    if (fileExplorerRef?.current?.selectRootFolder) {
+      fileExplorerRef.current.selectRootFolder();
+      showStatus('📁 Opening folder dialog');
+      if (!isListening) {
+        speakText('Opening folder dialog');
+      }
+    } else {
+      showStatus('❌ File explorer not available');
+      if (!isListening) {
+        speakText('File explorer not available');
+      }
+    }
+  };
+
+  const openFileByName = (fileName) => {
+    if (!fileExplorerRef?.current?.findAndOpenFile) {
+      showStatus('❌ File explorer not available');
+      if (!isListening) {
+        speakText('File explorer not available');
+      }
+      return;
+    }
+
+    // This will need to be implemented in FileExplorer
+    const found = fileExplorerRef.current.findAndOpenFile(fileName);
+    
+    if (found) {
+      showStatus(`📄 Opened ${fileName}`);
+      if (!isListening) {
+        speakText(`Opened ${fileName}`);
+      }
+    } else {
+      showStatus(`❌ File "${fileName}" not found`);
+      if (!isListening) {
+        speakText(`File ${fileName} not found`);
+      }
+    }
+  };
+
+  const expandDirectoryByName = (directoryName) => {
+    if (!fileExplorerRef?.current?.expandDirectoryByName) {
+      showStatus('❌ File explorer not available');
+      if (!isListening) {
+        speakText('File explorer not available');
+      }
+      return;
+    }
+
+    const found = fileExplorerRef.current.expandDirectoryByName(directoryName);
+    
+    if (found) {
+      showStatus(`📁 Expanded ${directoryName} directory`);
+      if (!isListening) {
+        speakText(`Expanded ${directoryName} directory`);
+      }
+    } else {
+      showStatus(`❌ Directory "${directoryName}" not found`);
+      if (!isListening) {
+        speakText(`Directory ${directoryName} not found`);
+      }
+    }
+  };
+
+  const refreshFileExplorer = () => {
+    if (fileExplorerRef?.current?.refreshFileTree) {
+      fileExplorerRef.current.refreshFileTree();
+      showStatus('🔄 Refreshing file explorer');
+      if (!isListening) {
+        speakText('Refreshing file explorer');
+      }
+    } else {
+      showStatus('❌ File explorer not available');
+      if (!isListening) {
+        speakText('File explorer not available');
+      }
+    }
+  };
+
   const executeAction = async (action) => {
     if (!editor) return;
 
@@ -825,6 +905,37 @@ const VoiceAssistant = ({ editor }) => {
         showStatus('📋 Line moving - feature coming soon!');
         break;
 
+      // Undo/Redo (can be triggered from edit category too)
+      case 'undo':
+        if (editor.getModel().canUndo()) {
+          editor.trigger('voice-assistant', 'undo', null);
+          showStatus('↩️ Undid last action');
+          if (!isListening) {
+            speakText('Undid last action');
+          }
+        } else {
+          showStatus('❌ Nothing to undo');
+          if (!isListening) {
+            speakText('Nothing to undo');
+          }
+        }
+        break;
+
+      case 'redo':
+        if (editor.getModel().canRedo()) {
+          editor.trigger('voice-assistant', 'redo', null);
+          showStatus('↪️ Redid last action');
+          if (!isListening) {
+            speakText('Redid last action');
+          }
+        } else {
+          showStatus('❌ Nothing to redo');
+          if (!isListening) {
+            speakText('Nothing to redo');
+          }
+        }
+        break;
+
       // Search navigation
       case 'nextSearchResult':
         navigateSearchResults('next');
@@ -844,6 +955,68 @@ const VoiceAssistant = ({ editor }) => {
 
       case 'clearSearch':
         clearSearchResults();
+        break;
+
+      // File Explorer operations
+      case 'openFolder':
+        openFolderDialog();
+        break;
+
+      case 'openFile':
+        if (action.fileName) {
+          openFileByName(action.fileName);
+        } else {
+          showStatus('❌ No filename specified');
+          if (!isListening) {
+            speakText('No filename specified');
+          }
+        }
+        break;
+
+      case 'expandDirectory':
+        if (action.directoryName) {
+          expandDirectoryByName(action.directoryName);
+        } else {
+          showStatus('❌ No directory name specified');
+          if (!isListening) {
+            speakText('No directory name specified');
+          }
+        }
+        break;
+
+      case 'refreshExplorer':
+        refreshFileExplorer();
+        break;
+
+      // Undo/Redo functionality
+      case 'undo':
+        if (editor.getModel().canUndo()) {
+          editor.trigger('voice-assistant', 'undo', null);
+          showStatus('↩️ Undid last action');
+          if (!isListening) {
+            speakText('Undid last action');
+          }
+        } else {
+          showStatus('❌ Nothing to undo');
+          if (!isListening) {
+            speakText('Nothing to undo');
+          }
+        }
+        break;
+
+      case 'redo':
+        if (editor.getModel().canRedo()) {
+          editor.trigger('voice-assistant', 'redo', null);
+          showStatus('↪️ Redid last action');
+          if (!isListening) {
+            speakText('Redid last action');
+          }
+        } else {
+          showStatus('❌ Nothing to redo');
+          if (!isListening) {
+            speakText('Nothing to redo');
+          }
+        }
         break;
 
       case 'error':
