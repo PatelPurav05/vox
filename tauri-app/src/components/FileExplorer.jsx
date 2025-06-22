@@ -3,7 +3,7 @@ import { open } from '@tauri-apps/plugin-dialog'
 import { readDir, exists } from '@tauri-apps/plugin-fs'
 import './FileExplorer.css'
 
-const FileExplorer = ({ onFileSelect, onRootPathChange, onContextMenu, currentFile }) => {
+const FileExplorer = ({ onFileSelect, onRootPathChange, onContextMenu, currentFile, refreshTrigger }) => {
   const [rootPath, setRootPath] = useState(null)
   const [fileTree, setFileTree] = useState([])
   const [expandedDirs, setExpandedDirs] = useState(new Set())
@@ -113,18 +113,44 @@ const FileExplorer = ({ onFileSelect, onRootPathChange, onContextMenu, currentFi
     }
   }
 
+  // Refresh file tree function
+  const refreshFileTree = async () => {
+    if (rootPath) {
+      setLoading(true)
+      const tree = await loadDirectory(rootPath)
+      setFileTree(tree)
+      
+      // Refresh expanded directories
+      const refreshExpandedDirs = async (items, expandedPaths) => {
+        for (const item of items) {
+          if (item.isDirectory && expandedPaths.has(item.path)) {
+            const children = await loadDirectory(item.path)
+            item.children = children
+            if (children.length > 0) {
+              await refreshExpandedDirs(children, expandedPaths)
+            }
+          }
+        }
+      }
+      
+      await refreshExpandedDirs(tree, expandedDirs)
+      setLoading(false)
+    }
+  }
+
   // Load root directory when path changes
   useEffect(() => {
     if (rootPath) {
-      const loadRootDirectory = async () => {
-        setLoading(true)
-        const tree = await loadDirectory(rootPath)
-        setFileTree(tree)
-        setLoading(false)
-      }
-      loadRootDirectory()
+      refreshFileTree()
     }
   }, [rootPath])
+
+  // Refresh when refreshTrigger changes
+  useEffect(() => {
+    if (refreshTrigger && rootPath) {
+      refreshFileTree()
+    }
+  }, [refreshTrigger])
 
   // Load subdirectory contents
   const loadSubdirectory = async (dirPath) => {

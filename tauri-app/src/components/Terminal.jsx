@@ -9,7 +9,8 @@ const Terminal = ({ isVisible, onToggle, workingDirectory }) => {
   const terminalRef = useRef(null);
   const xtermRef = useRef(null);
   const fitAddonRef = useRef(null);
-  const [currentDir, setCurrentDir] = useState(workingDirectory || '');
+  const [currentDir, setCurrentDir] = useState('');
+  const currentDirRef = useRef(''); // Use ref for immediate updates
   const [shellType, setShellType] = useState('');
 
   // Detect OS and set appropriate shell
@@ -24,10 +25,29 @@ const Terminal = ({ isVisible, onToggle, workingDirectory }) => {
     }
   };
 
+  // Get default directory based on OS
+  const getDefaultDirectory = () => {
+    const platform = navigator.platform.toLowerCase();
+    if (platform.includes('win')) {
+      // For Windows, default to user profile directory
+      return '%USERPROFILE%';
+    } else {
+      // For Unix-like systems (Mac, Linux), default to home directory
+      return '~';
+    }
+  };
+
   useEffect(() => {
     if (isVisible && terminalRef.current && !xtermRef.current) {
       const detectedShell = detectShell();
       setShellType(detectedShell);
+
+      // Set working directory - use provided workingDirectory or fallback to default
+      const initialDir = workingDirectory || getDefaultDirectory();
+      setCurrentDir(initialDir);
+      currentDirRef.current = initialDir;
+      
+      console.log('Terminal initialized with directory:', initialDir);
 
       // Create terminal instance
       const terminal = new XTerm({
@@ -77,10 +97,13 @@ const Terminal = ({ isVisible, onToggle, workingDirectory }) => {
       // Welcome message
       terminal.writeln(`Vox IDE Terminal - ${detectedShell.toUpperCase()}`);
       terminal.writeln('Connected to system shell');
+      terminal.writeln(`Working directory: ${initialDir}`);
       terminal.writeln('');
       
-      // Show initial prompt
-      showPrompt(terminal);
+      // Show initial prompt with a small delay to ensure everything is ready
+      setTimeout(() => {
+        showPrompt(terminal);
+      }, 100);
 
       // Handle input
       let currentLine = '';
@@ -134,13 +157,104 @@ const Terminal = ({ isVisible, onToggle, workingDirectory }) => {
     }
   }, [isVisible]);
 
+  // Update working directory when workingDirectory prop changes
+  useEffect(() => {
+    if (workingDirectory) {
+      setCurrentDir(workingDirectory);
+      currentDirRef.current = workingDirectory;
+    }
+  }, [workingDirectory]);
+
   const showPrompt = (terminal) => {
-    const prompt = shellType === 'powershell' ? 'PS> ' : '$ ';
+    // Show current directory in prompt for better visual feedback - use ref for immediate updates
+    const currentDirectory = currentDirRef.current || currentDir;
+    const shortDir = currentDirectory.length > 30 ? '...' + currentDirectory.slice(-27) : currentDirectory;
+    const prompt = shellType === 'powershell' 
+      ? `PS ${shortDir}> ` 
+      : `${shortDir}$ `;
     terminal.write(prompt);
+  };
+
+  const handleChangeDirectory = async (newDir, terminal) => {
+    try {
+      // Handle special cases
+      let targetDir = newDir;
+      
+      if (targetDir === '~' || targetDir === '') {
+        targetDir = getDefaultDirectory();
+      } else if (targetDir === '..') {
+        // Go up one directory
+        const currentPath = currentDirRef.current.replace(/\\/g, '/');
+        const pathParts = currentPath.split('/').filter(part => part.length > 0);
+        if (pathParts.length > 0) {
+          pathParts.pop();
+          targetDir = pathParts.length > 0 ? pathParts.join('/') : '/';
+        } else {
+          targetDir = '/';
+        }
+      } else if (targetDir === '.') {
+        // Stay in current directory
+        targetDir = currentDirRef.current;
+      } else if (!targetDir.includes('/') && !targetDir.includes('\\')) {
+        // Relative path - append to current directory
+        targetDir = `${currentDirRef.current}/${targetDir}`.replace(/\\/g, '/');
+      }
+
+      // Normalize path separators for Windows
+      if (shellType === 'powershell') {
+        targetDir = targetDir.replace(/\//g, '\\');
+      }
+
+      // Test if directory exists by trying to list it
+      const testCommand = shellType === 'powershell' 
+        ? `Test-Path -Path "${targetDir}" -PathType Container`
+        : `test -d "${targetDir}"`;
+
+      let cmd;
+      if (shellType === 'powershell') {
+        cmd = Command.create('powershell', ['-Command', testCommand], { cwd: currentDirRef.current });
+      } else {
+        cmd = Command.create('sh', ['-c', testCommand], { cwd: currentDirRef.current });
+      }
+
+      const result = await cmd.execute();
+      
+      // Check if directory exists
+      let directoryExists = false;
+      if (shellType === 'powershell') {
+        // PowerShell Test-Path returns 'True' or 'False'
+        directoryExists = result.stdout.trim() === 'True';
+      } else {
+        // For bash/sh, exit code 0 means directory exists
+        directoryExists = result.code === 0;
+      }
+
+      if (directoryExists) {
+        // Update both state and ref for immediate use
+        console.log('Changing directory from:', currentDirRef.current, 'to:', targetDir);
+        setCurrentDir(targetDir);
+        currentDirRef.current = targetDir;
+        console.log('Directory updated. Ref now:', currentDirRef.current);
+        terminal.writeln(`Directory changed to: ${targetDir}`);
+        return targetDir; // Return the new directory
+      } else {
+        terminal.writeln(`\x1b[31mcd: Directory not found: ${targetDir}\x1b[0m`);
+        return currentDirRef.current; // Return current directory if change failed
+      }
+    } catch (error) {
+      console.error('Error changing directory:', error);
+      terminal.writeln(`\x1b[31mcd: Error accessing directory: ${newDir}\x1b[0m`);
+      return currentDirRef.current; // Return current directory if error
+    }
   };
 
   const executeCommand = async (command, terminal) => {
     try {
+      console.log('Executing command:', command);
+      console.log('Current directory (ref):', currentDirRef.current);
+      console.log('Current directory (state):', currentDir);
+      console.log('Working directory prop:', workingDirectory);
+      
       // Handle built-in commands
       if (command === 'clear' || command === 'cls') {
         terminal.clear();
@@ -148,11 +262,23 @@ const Terminal = ({ isVisible, onToggle, workingDirectory }) => {
         return;
       }
 
+      if (command === 'pwd') {
+        terminal.writeln(currentDirRef.current);
+        showPrompt(terminal);
+        return;
+      }
+
       if (command.startsWith('cd ')) {
         const newDir = command.substring(3).trim();
         if (newDir) {
-          setCurrentDir(newDir);
+          await handleChangeDirectory(newDir, terminal);
+        } else {
+          // cd with no arguments - go to home directory
+          const homeDir = getDefaultDirectory();
+          await handleChangeDirectory(homeDir, terminal);
         }
+        showPrompt(terminal);
+        return;
       }
 
       // Execute command using Tauri shell
@@ -160,14 +286,18 @@ const Terminal = ({ isVisible, onToggle, workingDirectory }) => {
       let args;
       let options = {};
 
-      // Set working directory if available
-      if (currentDir) {
-        options.cwd = currentDir;
-      }
+      // Ensure we have a working directory - use ref for immediate access
+      const workDir = currentDirRef.current || workingDirectory || getDefaultDirectory();
+      
+      // Set working directory
+      options.cwd = workDir;
+      
+      // Ensure we have a shell type set
+      const currentShell = shellType || detectShell();
 
-      if (shellType === 'powershell') {
+      if (currentShell === 'powershell') {
         cmd = Command.create('powershell', ['-Command', command], options);
-      } else if (shellType === 'cmd') {
+      } else if (currentShell === 'cmd') {
         cmd = Command.create('cmd', ['/C', command], options);
       } else {
         // Default to sh for bash/zsh/other shells
@@ -197,12 +327,27 @@ const Terminal = ({ isVisible, onToggle, workingDirectory }) => {
       }
 
       showPrompt(terminal);
-    } catch (error) {
-      console.error('Shell command error:', error);
-      terminal.writeln(`\x1b[31mError: ${error.message || 'Command execution failed'}\x1b[0m`);
-      showPrompt(terminal);
-    }
-  };
+          } catch (error) {
+        console.error('Shell command error:', error);
+        console.error('Working directory was:', workDir);
+        console.error('Shell type was:', shellType);
+        
+        // More detailed error message
+        let errorMessage = 'Command execution failed';
+        if (error.message) {
+          if (error.message.includes('No such file or directory')) {
+            errorMessage = `Directory not found: ${workDir}`;
+          } else if (error.message.includes('permission')) {
+            errorMessage = `Permission denied. Check directory access: ${workDir}`;
+          } else {
+            errorMessage = error.message;
+          }
+        }
+        
+        terminal.writeln(`\x1b[31mError: ${errorMessage}\x1b[0m`);
+        showPrompt(terminal);
+      }
+    };
 
   if (!isVisible) return null;
 
