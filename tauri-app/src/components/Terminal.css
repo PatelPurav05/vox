@@ -93,76 +93,121 @@
 .terminal-content .xterm-viewport::-webkit-scrollbar-thumb:hover {
   background: #4f4f4f;
 }  */
+/* Add these terminal variables to your existing CSS variable sections */
 
+/* Dark Theme Terminal Variables (add to your existing :root section) */
+:root {
+  /* ... your existing dark theme variables ... */
+  
+  /* Terminal Dark Mode Variables */
+  --terminal-bg: #161829;
+  --terminal-header-bg: rgba(41, 45, 62, 0.7);
+  --terminal-border: #4A5568;
+  --terminal-text: #CBD5E0;
+  --terminal-title: #E2E8F0;
+  --terminal-cwd: #64FFDA;
+  --terminal-close-hover: rgba(74, 85, 104, 0.3);
+  --terminal-scrollbar-track: rgba(41, 45, 62, 0.5);
+  --terminal-scrollbar-thumb: #6B7280;
+  --terminal-scrollbar-thumb-hover: #9CA3AF;
+  --terminal-scrollbar-border: rgba(41, 45, 62, 0.5);
+  --terminal-shadow: rgba(0, 0, 0, 0.6);
+}
+
+/* Light Theme Terminal Variables (add to your existing [data-theme="light"] section) */
+[data-theme="light"] {
+  /* ... your existing light theme variables ... */
+  
+  /* Terminal Light Mode Variables */
+  --terminal-bg: #ffffff;
+  --terminal-header-bg: rgba(248, 250, 252, 0.9);
+  --terminal-border: #e2e8f0;
+  --terminal-text: #4a5568;
+  --terminal-title: #2d3748;
+  --terminal-cwd: #0891b2;
+  --terminal-close-hover: rgba(226, 232, 240, 0.5);
+  --terminal-scrollbar-track: rgba(248, 250, 252, 0.8);
+  --terminal-scrollbar-thumb: #cbd5e0;
+  --terminal-scrollbar-thumb-hover: #a0aec0;
+  --terminal-scrollbar-border: rgba(248, 250, 252, 0.8);
+  --terminal-shadow: rgba(0, 0, 0, 0.1);
+}
+
+/* Updated Terminal Styles Using CSS Variables */
 .terminal-container {
   position: fixed;
   bottom: 0;
   left: 0;
   right: 0;
   height: 300px;
-  background-color: #161829; /* Deep navy background */
-  border-top: 1px solid #4A5568; /* Slate grey border */
+  background-color: var(--terminal-bg);
+  border-top: 1px solid var(--terminal-border);
   display: flex;
   flex-direction: column;
   z-index: 1000;
-  box-shadow: 0px -5px 25px rgba(0, 0, 0, 0.6); /* Soft shadow for depth */
-  border-radius: 8px 8px 0 0; /* Rounded top corners */
-  overflow: hidden; /* Ensures rounded corners are respected */
+  box-shadow: 0px -5px 25px var(--terminal-shadow);
+  border-radius: 8px 8px 0 0;
+  overflow: hidden;
+  transition: all 0.3s ease; /* Smooth theme transitions */
 }
 
 .terminal-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 10px 16px; /* Slightly more padding */
-  background-color: rgba(41, 45, 62, 0.7); /* Translucent header */
-  backdrop-filter: blur(10px); /* Frosted glass effect */
-  border-bottom: 1px solid #4A5568;
-  color: #CBD5E0; /* Soft blue-grey text */
-  font-size: 14px; /* Slightly larger text */
+  padding: 10px 16px;
+  background-color: var(--terminal-header-bg);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--terminal-border);
+  color: var(--terminal-text);
+  font-size: 14px;
   font-weight: 500;
+  transition: all 0.3s ease;
 }
 
 .terminal-title {
-  color: #E2E8F0; /* Lighter text for title */
+  color: var(--terminal-title);
   font-weight: 600;
+  transition: color 0.3s ease;
 }
 
 .terminal-controls {
   display: flex;
   align-items: center;
-  gap: 16px; /* Increased gap for spacing */
+  gap: 16px;
 }
 
 .terminal-cwd {
-  color: #64FFDA; /* Teal for current directory */
+  color: var(--terminal-cwd);
   font-size: 12px;
   max-width: 200px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  transition: color 0.3s ease;
 }
 
 .terminal-close {
   background: none;
   border: none;
-  color: #CBD5E0; /* Softer color for the close button */
+  color: var(--terminal-text);
   font-size: 16px;
   cursor: pointer;
-  padding: 6px 10px; /* Increased padding for better touch target */
-  border-radius: 5px; /* More rounded corners */
-  transition: background-color 0.2s;
+  padding: 6px 10px;
+  border-radius: 5px;
+  transition: all 0.3s ease;
 }
 
 .terminal-close:hover {
-  background-color: rgba(74, 85, 104, 0.3); /* Lighter hover effect */
+  background-color: var(--terminal-close-hover);
 }
 
 .terminal-content {
   flex: 1;
-  padding: 12px; /* Increased padding */
-  overflow: auto; /* Changed from hidden to auto to allow scrolling */
-  background-color: #161829;
+  padding: 12px;
+  overflow: auto;
+  background-color: var(--terminal-bg);
+  transition: background-color 0.3s ease;
 }
 
 .terminal-content .xterm {
@@ -170,29 +215,76 @@
 }
 
 .terminal-content .xterm-viewport {
-  background-color: #161829 !important;
+  background-color: var(--terminal-bg) !important;
+  transition: background-color 0.3s ease;
 }
 
 .terminal-content .xterm-screen {
-  background-color: #161829 !important;
+  background-color: var(--terminal-bg) !important;
+  transition: background-color 0.3s ease;
 }
 
-/* Aesthetic scrollbar for terminal */
+/* Updated scrollbar styles with CSS variables */
 .terminal-content .xterm-viewport::-webkit-scrollbar {
-  width: 10px; /* Slightly wider scrollbar */
+  width: 10px;
 }
 
 .terminal-content .xterm-viewport::-webkit-scrollbar-track {
-  background: rgba(41, 45, 62, 0.5); /* Semi-transparent track */
-  border-radius: 5px; /* Rounded corners for the track */
+  background: var(--terminal-scrollbar-track);
+  border-radius: 5px;
+  transition: background 0.3s ease;
 }
 
 .terminal-content .xterm-viewport::-webkit-scrollbar-thumb {
-  background: #6B7280; /* A more subtle, grey thumb */
+  background: var(--terminal-scrollbar-thumb);
   border-radius: 5px;
-  border: 2px solid rgba(41, 45, 62, 0.5); /* Add a border for better definition */
+  border: 2px solid var(--terminal-scrollbar-border);
+  transition: all 0.3s ease;
 }
 
 .terminal-content .xterm-viewport::-webkit-scrollbar-thumb:hover {
-  background: #9CA3AF; /* Lighter hover color */
+  background: var(--terminal-scrollbar-thumb-hover);
+}
+
+/* Additional xterm.js theme support for light mode */
+[data-theme="light"] .terminal-content .xterm-viewport {
+  color: #2d3748 !important;
+}
+
+[data-theme="light"] .terminal-content .xterm-screen {
+  color: #2d3748 !important;
+}
+
+/* Ensure xterm cursor and selection work in both themes */
+.terminal-content .xterm-cursor-layer .xterm-cursor {
+  background-color: var(--terminal-cwd) !important;
+  transition: background-color 0.3s ease;
+}
+
+.terminal-content .xterm-selection {
+  background-color: var(--terminal-cwd) !important;
+  opacity: 0.3;
+  transition: background-color 0.3s ease;
+}
+
+/* Terminal text colors for better light mode support */
+[data-theme="light"] .terminal-content .xterm-bold {
+  color: #1a202c !important;
+  font-weight: bold;
+}
+
+[data-theme="light"] .terminal-content .xterm-underline {
+  text-decoration: underline;
+  color: var(--terminal-cwd);
+}
+
+/* Dark mode specific xterm styling */
+:root .terminal-content .xterm-bold {
+  color: #f7fafc !important;
+  font-weight: bold;
+}
+
+:root .terminal-content .xterm-underline {
+  text-decoration: underline;
+  color: var(--terminal-cwd);
 }

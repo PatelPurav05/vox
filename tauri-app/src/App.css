@@ -341,10 +341,12 @@
 }
 
 .status-bar {
-  display: flex;
+  /* this was causing a black button to appear on the bottom right of the screen */
+  /* display: flex; */
   align-items: center;
   gap: 10px;
   flex-shrink: 0;
+  display: none;
 }
 
 .auto-save-indicator {
@@ -605,6 +607,7 @@
   color: var(--file-text);
   overflow-y: auto;
   flex: 1;
+  
 }
 
 .file-tree-item {
