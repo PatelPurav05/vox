@@ -351,6 +351,29 @@ function App() {
     return languageMap[extension] || 'text'
   }
 
+  // Handle terminal command execution from voice assistant
+  const handleRunTerminalCommand = async (command) => {
+    return new Promise((resolve, reject) => {
+      try {
+        addDebugLog(`Voice Assistant requesting terminal command: ${command}`);
+        
+        // Create a custom event to send the command to the terminal
+        const terminalCommandEvent = new CustomEvent('terminalCommand', {
+          detail: { command }
+        });
+        
+        // Dispatch the event to be picked up by the terminal component
+        document.dispatchEvent(terminalCommandEvent);
+        
+        addDebugLog(`Terminal command dispatched: ${command}`);
+        resolve();
+      } catch (error) {
+        addDebugLog(`Error dispatching terminal command: ${error.message}`, 'error');
+        reject(error);
+      }
+    });
+  }
+
   return (
     <div className="app">
       <div className="app-header">
@@ -504,7 +527,13 @@ function App() {
         targetPath={newFileDialog.targetPath}
       />
 
-      <VoiceAssistant editor={editorInstance} fileExplorerRef={fileExplorerRef} />
+      <VoiceAssistant 
+        editor={editorInstance} 
+        fileExplorerRef={fileExplorerRef}
+        onToggleTerminal={() => setIsTerminalVisible(!isTerminalVisible)}
+        isTerminalVisible={isTerminalVisible}
+        onRunTerminalCommand={handleRunTerminalCommand}
+      />
     </div>
   )
 }

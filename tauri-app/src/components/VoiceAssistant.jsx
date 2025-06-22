@@ -3,7 +3,7 @@ import useVapi from '../hooks/useVapi';
 import GeminiService from '../services/geminiService';
 import './VoiceAssistant.css';
 
-const VoiceAssistant = ({ editor, fileExplorerRef }) => {
+const VoiceAssistant = ({ editor, fileExplorerRef, onToggleTerminal, isTerminalVisible, onRunTerminalCommand }) => {
   const [vapiKey, setVapiKey] = useState('');
   const [assistantId, setAssistantId] = useState('');
   const [geminiKey, setGeminiKey] = useState('');
@@ -757,11 +757,102 @@ const VoiceAssistant = ({ editor, fileExplorerRef }) => {
     }
   };
 
+  // Terminal control functions
+  const openTerminal = () => {
+    if (onToggleTerminal && !isTerminalVisible) {
+      onToggleTerminal();
+      showStatus('📟 Terminal opened');
+      if (!isListening) {
+        speakText('Terminal opened');
+      }
+    } else if (isTerminalVisible) {
+      showStatus('📟 Terminal is already open');
+      if (!isListening) {
+        speakText('Terminal is already open');
+      }
+    } else {
+      showStatus('❌ Terminal control not available');
+      if (!isListening) {
+        speakText('Terminal control not available');
+      }
+    }
+  };
+
+  const closeTerminal = () => {
+    if (onToggleTerminal && isTerminalVisible) {
+      onToggleTerminal();
+      showStatus('📟 Terminal closed');
+      if (!isListening) {
+        speakText('Terminal closed');
+      }
+    } else if (!isTerminalVisible) {
+      showStatus('📟 Terminal is already closed');
+      if (!isListening) {
+        speakText('Terminal is already closed');
+      }
+    } else {
+      showStatus('❌ Terminal control not available');
+      if (!isListening) {
+        speakText('Terminal control not available');
+      }
+    }
+  };
+
+  const toggleTerminal = () => {
+    if (onToggleTerminal) {
+      onToggleTerminal();
+      const newState = !isTerminalVisible;
+      showStatus(`📟 Terminal ${newState ? 'opened' : 'closed'}`);
+      if (!isListening) {
+        speakText(`Terminal ${newState ? 'opened' : 'closed'}`);
+      }
+    } else {
+      showStatus('❌ Terminal control not available');
+      if (!isListening) {
+        speakText('Terminal control not available');
+      }
+    }
+  };
+
+  const runTerminalCommand = async (command) => {
+    if (onRunTerminalCommand) {
+      showStatus(`📟 Running: ${command}`);
+      if (!isListening) {
+        speakText(`Running ${command}`);
+      }
+      
+      try {
+        // Ensure terminal is open first
+        if (!isTerminalVisible && onToggleTerminal) {
+          onToggleTerminal();
+          // Give terminal time to open
+          await new Promise(resolve => setTimeout(resolve, 300));
+        }
+        
+        // Execute the command
+        await onRunTerminalCommand(command);
+        
+        showStatus(`✅ Command executed: ${command}`);
+      } catch (error) {
+        console.error('Error running terminal command:', error);
+        showStatus(`❌ Command failed: ${command}`);
+        if (!isListening) {
+          speakText(`Command failed: ${command}`);
+        }
+      }
+    } else {
+      showStatus('❌ Terminal command execution not available');
+      if (!isListening) {
+        speakText('Terminal command execution not available');
+      }
+    }
+  };
+
   const executeAction = async (action) => {
     console.log('🎬 Executing action:', action.action, 'with data:', action);
     
-    // Allow file explorer actions even when no editor is open
-    const fileExplorerActions = ['openFolder', 'openFile', 'expandDirectory', 'refreshExplorer'];
+    // Allow file explorer and terminal actions even when no editor is open
+    const fileExplorerActions = ['openFolder', 'openFile', 'expandDirectory', 'refreshExplorer', 'openTerminal', 'closeTerminal', 'toggleTerminal', 'runCommand'];
     
     if (!editor && !fileExplorerActions.includes(action.action)) {
       console.log('⚠️ No editor available for action:', action.action);
@@ -1050,7 +1141,29 @@ const VoiceAssistant = ({ editor, fileExplorerRef }) => {
         refreshFileExplorer();
         break;
 
+      // Terminal operations
+      case 'openTerminal':
+        openTerminal();
+        break;
 
+      case 'closeTerminal':
+        closeTerminal();
+        break;
+
+      case 'toggleTerminal':
+        toggleTerminal();
+        break;
+
+      case 'runCommand':
+        if (action.command) {
+          await runTerminalCommand(action.command);
+        } else {
+          showStatus('❌ No command specified');
+          if (!isListening) {
+            speakText('No command specified');
+          }
+        }
+        break;
 
       case 'error':
         showStatus(`❌ Error: ${action.message}`);

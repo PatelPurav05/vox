@@ -28,11 +28,13 @@ Return ONLY this JSON:
 
 Categories:
 - code_action: Add/create code (write function, add variable, insert code)
-- edit: Modify existing code (delete, replace, fix, change)
-- navigation: Move cursor, go to line, find text, open files/folders, file explorer operations
+- edit: Modify existing code (delete, replace, fix, change)  
+- navigation: Move cursor, go to line, find text, open files/folders, file explorer operations, TERMINAL COMMANDS (open terminal, run commands, execute, ls, npm, git, python, etc.)
 - format: Indent, outdent, reformat, organize
 - question: Ask about code or explain something
 - conversation: General chat
+
+IMPORTANT: Any request involving terminal commands, running system commands, or executing programs should be "navigation" NOT "conversation".
 
 ${editorContext.hasEditor ? '' : 'NOTE: No editor is currently open - prioritize file explorer operations (navigation category).'}
 
@@ -322,6 +324,27 @@ Available actions:
   "description": "refreshed file explorer"
 }
 
+{
+  "action": "openTerminal",
+  "description": "opened terminal"
+}
+
+{
+  "action": "closeTerminal", 
+  "description": "closed terminal"
+}
+
+{
+  "action": "toggleTerminal",
+  "description": "toggled terminal visibility"
+}
+
+{
+  "action": "runCommand",
+  "command": "terminal command to execute",
+  "description": "executed terminal command"
+}
+
 Examples:
 - "go to line 42" → goToLine with line: 42
 - "move up 5 lines" → moveCursor with direction: "up", count: 5
@@ -349,6 +372,22 @@ Examples:
 - "expand components directory" → expandDirectory with directoryName: "components"
 - "refresh explorer" → refreshExplorer
 - "refresh file tree" → refreshExplorer
+- "open terminal" → openTerminal
+- "show terminal" → openTerminal
+- "close terminal" → closeTerminal
+- "hide terminal" → closeTerminal
+- "toggle terminal" → toggleTerminal
+- "run npm install" → runCommand with command: "npm install"
+- "execute ls" → runCommand with command: "ls"
+- "run python main.py" → runCommand with command: "python main.py"
+- "git status" → runCommand with command: "git status"
+- "npm start" → runCommand with command: "npm start"
+- "execute l s" → runCommand with command: "ls"
+- "list files" → runCommand with command: "ls"
+- "run l s" → runCommand with command: "ls"
+- "execute ls command" → runCommand with command: "ls"
+- "terminal command ls" → runCommand with command: "ls"
+- "run dir" → runCommand with command: "dir"
 
 Parse the request and return the appropriate navigation action.`;
 
