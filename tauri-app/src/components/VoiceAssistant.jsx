@@ -525,19 +525,127 @@ const VoiceAssistant = ({ editor }) => {
         showStatus(`🔄 ${action.description || 'Code replaced'}`);
         break;
 
-      case 'createFunction':
-        const functionCode = `function ${action.name}(${action.params.join(', ')}) {\n  // TODO: Implement\n}\n`;
-        const functionLine = action.line || editor.getPosition().lineNumber;
+      // Precise cursor movement
+      case 'moveCursor':
+        const currentPos = editor.getPosition();
+        let newPos = { ...currentPos };
+        
+        switch (action.direction) {
+          case 'up':
+            newPos.lineNumber = Math.max(1, currentPos.lineNumber - (action.count || 1));
+            break;
+          case 'down':
+            newPos.lineNumber = Math.min(editor.getModel().getLineCount(), currentPos.lineNumber + (action.count || 1));
+            break;
+          case 'left':
+            newPos.column = Math.max(1, currentPos.column - (action.count || 1));
+            break;
+          case 'right':
+            newPos.column = currentPos.column + (action.count || 1);
+            break;
+          case 'start':
+            newPos.column = 1;
+            break;
+          case 'end':
+            newPos.column = editor.getModel().getLineMaxColumn(currentPos.lineNumber);
+            break;
+        }
+        
+        editor.setPosition(newPos);
+        showStatus(`↔️ ${action.description || 'Cursor moved'}`);
+        break;
+
+      // Indentation control
+      case 'indent':
+        const indentStart = action.startLine || editor.getPosition().lineNumber;
+        const indentEnd = action.endLine || indentStart;
+        const indentLevels = action.levels || 1;
+        const indentString = '    '.repeat(indentLevels); // 4 spaces per level
+        
+        for (let line = indentStart; line <= indentEnd; line++) {
+          editor.executeEdits('voice-assistant', [{
+            range: {
+              startLineNumber: line,
+              startColumn: 1,
+              endLineNumber: line,
+              endColumn: 1
+            },
+            text: indentString
+          }]);
+        }
+        showStatus(`➡️ Indented ${indentEnd - indentStart + 1} line(s)`);
+        break;
+
+      case 'outdent':
+        const outdentStart = action.startLine || editor.getPosition().lineNumber;
+        const outdentEnd = action.endLine || outdentStart;
+        const outdentLevels = action.levels || 1;
+        const spacesToRemove = 4 * outdentLevels;
+        
+        for (let line = outdentStart; line <= outdentEnd; line++) {
+          const lineContent = editor.getModel().getLineContent(line);
+          const leadingSpaces = lineContent.match(/^ */)[0].length;
+          const toRemove = Math.min(spacesToRemove, leadingSpaces);
+          
+          if (toRemove > 0) {
+            editor.executeEdits('voice-assistant', [{
+              range: {
+                startLineNumber: line,
+                startColumn: 1,
+                endLineNumber: line,
+                endColumn: toRemove + 1
+              },
+              text: ''
+            }]);
+          }
+        }
+        showStatus(`⬅️ Outdented ${outdentEnd - outdentStart + 1} line(s)`);
+        break;
+
+      // Insert at specific line
+      case 'insertAt':
+        const targetLine = action.line || editor.getPosition().lineNumber;
         editor.executeEdits('voice-assistant', [{
           range: {
-            startLineNumber: functionLine,
+            startLineNumber: targetLine,
             startColumn: 1,
-            endLineNumber: functionLine,
+            endLineNumber: targetLine,
             endColumn: 1
           },
-          text: functionCode
+          text: action.code + '\n'
         }]);
-        showStatus(`🔧 Created function ${action.name}`);
+        showStatus(`📝 ${action.description || 'Code inserted at line ' + targetLine}`);
+        break;
+
+      // Add new line
+      case 'addNewLine':
+        const baseLine = action.line || editor.getPosition().lineNumber;
+        const newLinePosition = action.position === 'before' ? baseLine : baseLine + 1;
+        
+        editor.executeEdits('voice-assistant', [{
+          range: {
+            startLineNumber: newLinePosition,
+            startColumn: 1,
+            endLineNumber: newLinePosition,
+            endColumn: 1
+          },
+          text: '\n'
+        }]);
+        
+        // Move cursor to the new line
+        editor.setPosition({ lineNumber: newLinePosition, column: 1 });
+        showStatus(`📄 Added new line ${action.position || 'after'} line ${baseLine}`);
+        break;
+
+      // Format code
+      case 'formatCode':
+        editor.getAction('editor.action.formatDocument').run();
+        showStatus('🎨 Code formatted');
+        break;
+
+      // Move lines (basic implementation)
+      case 'moveLines':
+        showStatus('📋 Line moving - feature coming soon!');
         break;
 
       case 'error':

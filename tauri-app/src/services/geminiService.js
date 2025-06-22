@@ -1,51 +1,43 @@
 class GeminiService {
   constructor(apiKey) {
     this.apiKey = apiKey;
-    this.apiUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent';
+    this.apiUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
   }
 
+  // Focused action type determination - do what the user asks
   async determineActionType(transcript, editorContext) {
     console.log('🧠 Determining action type for:', transcript);
     
     try {
       const prompt = `
-You are an AI assistant that determines what type of action a user wants to perform.
+You are a precise coding assistant that does exactly what the user asks.
 
 User command: "${transcript}"
 
-Current editor context:
-- File: ${editorContext.fileName}
-- Language: ${editorContext.language}  
-- Current line: ${editorContext.cursorLine}
-- Total lines: ${editorContext.totalLines}
-- Current content: ${editorContext.currentContent ? editorContext.currentContent.substring(0, 1000) : 'N/A'}
-- Selected text: ${editorContext.selectedText || 'None'}
+Context:
+- File: ${editorContext.fileName} (${editorContext.language})
+- Line: ${editorContext.cursorLine}/${editorContext.totalLines}
+- Selected: ${editorContext.selectedText || 'None'}
 
-Analyze the user's command and determine the action type. Return ONLY a JSON object with this structure:
+Return ONLY this JSON:
 {
-  "actionType": "code_action" | "conversation" | "navigation" | "edit" | "question",
+  "actionType": "code_action" | "edit" | "navigation" | "format" | "question" | "conversation",
   "confidence": 0.0-1.0,
   "reasoning": "brief explanation"
 }
 
-Action types:
-- "code_action": Writing, creating, or generating new code
-- "edit": Modifying existing code (delete, replace, refactor)
-- "navigation": Moving around the editor (go to line, find, scroll)
-- "question": Asking about code, concepts, or getting explanations
-- "conversation": General chat not related to coding
+Categories:
+- code_action: Add/create code (write function, add variable, insert code)
+- edit: Modify existing code (delete, replace, fix, change)
+- navigation: Move cursor, go to line, find text
+- format: Indent, outdent, reformat, organize
+- question: Ask about code or explain something
+- conversation: General chat
 
-Examples:
-- "create a function that adds two numbers" → {"actionType": "code_action", "confidence": 0.95, "reasoning": "User wants to create new code"}
-- "delete line 10" → {"actionType": "edit", "confidence": 0.98, "reasoning": "User wants to modify existing code"}
-- "go to line 42" → {"actionType": "navigation", "confidence": 0.99, "reasoning": "User wants to navigate in editor"}
-- "what does this function do?" → {"actionType": "question", "confidence": 0.90, "reasoning": "User is asking about code"}
-- "how are you today?" → {"actionType": "conversation", "confidence": 0.85, "reasoning": "General conversation"}
-
-Return ONLY the JSON object.`;
+Be precise - do what the user asks, nothing more.`;
 
       const response = await this.callGeminiAPI(prompt);
-      const actionType = this.parseJsonResponse(response);
+      const actionType = this.parseSimpleJsonResponse(response);
       
       console.log('🎯 Action type determined:', actionType);
       return actionType;
@@ -55,38 +47,43 @@ Return ONLY the JSON object.`;
     }
   }
 
+  // Focused code generation - write exactly what's requested
   async processCodeAction(transcript, editorContext) {
     console.log('💻 Processing code action:', transcript);
     
+    // Use Python-specific handler for Python files
+    if (editorContext.language === 'python') {
+      return await this.processPythonCodeAction(transcript, editorContext);
+    }
+    
     const prompt = `
-You are a code generation assistant. Create code based on the user's request.
+You are a precise code generator. Write exactly what the user requests.
 
 User request: "${transcript}"
 
-Editor context:
-- File: ${editorContext.fileName}
+Context:
 - Language: ${editorContext.language}
+- File: ${editorContext.fileName}
 - Current line: ${editorContext.cursorLine}
-- Total lines: ${editorContext.totalLines}
-- Current content: ${editorContext.currentContent ? editorContext.currentContent.substring(0, 2000) : 'N/A'}
-- Selected text: ${editorContext.selectedText || 'None'}
+- Current code around cursor:
+${editorContext.surroundingContext || 'N/A'}
 
-Generate appropriate code and return a JSON object:
+Write clean, working code that does exactly what the user asked for. No extra features.
+
+Return JSON:
 {
-  "action": "insertCode" | "createFunction" | "createClass" | "createComponent",
-  "code": "the generated code",
-  "line": line_number_to_insert,
-  "description": "brief description of what was created"
+  "action": "insertCode",
+  "code": "the exact code requested",
+  "line": line_number_or_null_for_current_position,
+  "description": "what you created"
 }
 
-Important:
-- Write clean, production-ready code
-- Follow best practices for the language
-- Add appropriate comments
-- Consider the existing context
-- Use proper indentation and formatting
+Examples:
+- "create a variable x equals 5" → var x = 5;
+- "add a function that adds two numbers" → function add(a, b) { return a + b; }
+- "write a for loop from 1 to 10" → for (let i = 1; i <= 10; i++) { }
 
-Return ONLY the JSON object.`;
+Write exactly what's requested, nothing more.`;
 
     try {
       const response = await this.callGeminiAPI(prompt);
@@ -99,37 +96,105 @@ Return ONLY the JSON object.`;
     }
   }
 
+  // Focused Python code generation
+  async processPythonCodeAction(transcript, editorContext) {
+    console.log('🐍 Processing Python code action:', transcript);
+    
+    const prompt = `
+You are a Python code generator. Write exactly what the user requests.
+
+User request: "${transcript}"
+
+Context:
+- File: ${editorContext.fileName}
+- Current line: ${editorContext.cursorLine}
+- Current Python code:
+${editorContext.surroundingContext || 'N/A'}
+
+Write clean Python code that does exactly what's requested. Include:
+- Proper indentation (4 spaces)
+- Type hints for functions
+- Brief docstring for functions/classes
+- Basic error handling if needed
+
+Return JSON:
+{
+  "action": "insertCode",
+  "code": "the exact Python code requested",
+  "line": line_number_or_null,
+  "description": "what you created"
+}
+
+Examples:
+- "create a function that adds two numbers" → def add(a: int, b: int) -> int: ...
+- "add a variable users equals empty list" → users = []
+- "write a for loop through items" → for item in items:
+
+Write exactly what's requested. Don't add extra features unless specifically asked.`;
+
+    try {
+      const response = await this.callGeminiAPI(prompt);
+      const action = this.parseJsonResponse(response);
+      console.log('🐍 Python code action generated:', action);
+      return action;
+    } catch (error) {
+      console.error('❌ Error generating Python code action:', error);
+      return { action: 'error', message: 'Failed to generate Python code' };
+    }
+  }
+
+  // Enhanced editing with precise control
   async processEditAction(transcript, editorContext) {
     console.log('✏️ Processing edit action:', transcript);
     
     const prompt = `
-You are a code editing assistant. Modify existing code based on the user's request.
+You are a precise code editor. Do exactly what the user requests.
 
 User request: "${transcript}"
 
-Editor context:
-- File: ${editorContext.fileName}
+Context:
 - Language: ${editorContext.language}
 - Current line: ${editorContext.cursorLine}
-- Total lines: ${editorContext.totalLines}
-- Current content: ${editorContext.currentContent ? editorContext.currentContent.substring(0, 2000) : 'N/A'}
 - Selected text: ${editorContext.selectedText || 'None'}
+- Code around cursor:
+${editorContext.surroundingContext || 'N/A'}
 
-Determine the edit action and return a JSON object:
+Available actions:
 {
-  "action": "deleteLines" | "replaceCode" | "refactor" | "insertAt",
-  "startLine": start_line_number,
-  "endLine": end_line_number,
-  "newCode": "replacement code if applicable",
-  "description": "brief description of the edit"
+  "action": "deleteLines",
+  "startLine": number,
+  "endLine": number,
+  "description": "what was deleted"
 }
 
-For line operations:
-- If deleting: just provide startLine and endLine
-- If replacing: provide startLine, endLine, and newCode
-- If inserting: provide line and newCode
+{
+  "action": "replaceCode", 
+  "startLine": number,
+  "endLine": number,
+  "newCode": "replacement code",
+  "description": "what was changed"
+}
 
-Return ONLY the JSON object.`;
+{
+  "action": "insertAt",
+  "line": number,
+  "code": "code to insert",
+  "description": "what was added"
+}
+
+{
+  "action": "moveLines",
+  "fromLine": number,
+  "toLine": number,
+  "description": "moved lines"
+}
+
+Examples:
+- "delete line 5" → deleteLines with startLine: 5, endLine: 5
+- "replace this function" → replaceCode with improved version
+- "add a print statement here" → insertAt with print code
+
+Do exactly what's requested.`;
 
     try {
       const response = await this.callGeminiAPI(prompt);
@@ -142,36 +207,56 @@ Return ONLY the JSON object.`;
     }
   }
 
+  // Enhanced navigation with cursor control
   async processNavigationAction(transcript, editorContext) {
     console.log('🧭 Processing navigation action:', transcript);
     
     const prompt = `
-You are a navigation assistant. Help users move around in their code editor.
+You are a navigation assistant for code editors.
 
 User request: "${transcript}"
 
-Editor context:
+Context:
+- Current line: ${editorContext.cursorLine}/${editorContext.totalLines}
 - File: ${editorContext.fileName}
-- Language: ${editorContext.language}
-- Current line: ${editorContext.cursorLine}
-- Total lines: ${editorContext.totalLines}
-- Current content: ${editorContext.currentContent ? editorContext.currentContent.substring(0, 2000) : 'N/A'}
 
-Parse the navigation request and return a JSON object:
+Available actions:
 {
-  "action": "goToLine" | "findText" | "goToFunction" | "goToTop" | "goToBottom",
-  "line": line_number_if_applicable,
-  "searchText": "text_to_find_if_applicable",
-  "description": "brief description of the navigation"
+  "action": "goToLine",
+  "line": number,
+  "description": "moved to line X"
+}
+
+{
+  "action": "findText",
+  "searchText": "text to find",
+  "description": "searching for X"
+}
+
+{
+  "action": "moveCursor",
+  "direction": "up|down|left|right|start|end",
+  "count": number,
+  "description": "cursor movement"
+}
+
+{
+  "action": "goToTop",
+  "description": "moved to top"
+}
+
+{
+  "action": "goToBottom", 
+  "description": "moved to bottom"
 }
 
 Examples:
-- "go to line 42" → {"action": "goToLine", "line": 42}
-- "find the function getData" → {"action": "findText", "searchText": "function getData"}
-- "go to the top" → {"action": "goToTop"}
-- "go to the bottom" → {"action": "goToBottom"}
+- "go to line 42" → goToLine with line: 42
+- "move up 5 lines" → moveCursor with direction: "up", count: 5
+- "find the word hello" → findText with searchText: "hello"
+- "go to the end of the line" → moveCursor with direction: "end"
 
-Return ONLY the JSON object.`;
+Parse the request and return the appropriate navigation action.`;
 
     try {
       const response = await this.callGeminiAPI(prompt);
@@ -184,36 +269,96 @@ Return ONLY the JSON object.`;
     }
   }
 
+  // New formatting actions for indentation and code organization
+  async processFormatAction(transcript, editorContext) {
+    console.log('📐 Processing format action:', transcript);
+    
+    const prompt = `
+You are a code formatter. Handle indentation and formatting requests.
+
+User request: "${transcript}"
+
+Context:
+- Current line: ${editorContext.cursorLine}
+- Selected text: ${editorContext.selectedText || 'None'}
+- Language: ${editorContext.language}
+
+Available actions:
+{
+  "action": "indent",
+  "startLine": number,
+  "endLine": number,
+  "levels": number,
+  "description": "indented lines"
+}
+
+{
+  "action": "outdent",
+  "startLine": number, 
+  "endLine": number,
+  "levels": number,
+  "description": "outdented lines"
+}
+
+{
+  "action": "formatCode",
+  "startLine": number,
+  "endLine": number,
+  "description": "formatted code"
+}
+
+{
+  "action": "addNewLine",
+  "line": number,
+  "position": "before|after",
+  "description": "added line break"
+}
+
+Examples:
+- "indent this line" → indent current line by 1 level
+- "tab out 2 levels" → outdent by 2 levels
+- "add a new line above" → addNewLine before current line
+- "format this selection" → formatCode for selected area
+
+Return the appropriate formatting action.`;
+
+    try {
+      const response = await this.callGeminiAPI(prompt);
+      const action = this.parseJsonResponse(response);
+      console.log('📐 Format action generated:', action);
+      return action;
+    } catch (error) {
+      console.error('❌ Error generating format action:', error);
+      return { action: 'error', message: 'Failed to process formatting' };
+    }
+  }
+
+  // Simplified question handling
   async processQuestionAction(transcript, editorContext) {
     console.log('❓ Processing question action:', transcript);
     
     const prompt = `
-You are a helpful coding assistant. Answer the user's question about their code or programming concepts.
+You are a helpful coding assistant. Answer the user's question clearly and concisely.
 
-User question: "${transcript}"
+Question: "${transcript}"
 
-Editor context:
-- File: ${editorContext.fileName}
+Context:
 - Language: ${editorContext.language}
-- Current line: ${editorContext.cursorLine}
-- Current content: ${editorContext.currentContent ? editorContext.currentContent.substring(0, 2000) : 'N/A'}
-- Selected text: ${editorContext.selectedText || 'None'}
+- Current code:
+${editorContext.surroundingContext || 'N/A'}
 
-Provide a helpful, concise answer. Return a JSON object:
+${editorContext.selectedText ? `Selected code:\n${editorContext.selectedText}` : ''}
+
+Provide a clear, practical answer. Focus on the code in context.
+
+Return JSON:
 {
   "action": "voiceResponse",
-  "response": "your helpful answer here",
+  "response": "your helpful answer (under 150 words)",
   "shouldSpeak": true
 }
 
-Keep responses:
-- Clear and concise
-- Technically accurate
-- Contextual to their current code
-- Friendly and helpful
-- Under 200 words for voice delivery
-
-Return ONLY the JSON object.`;
+Keep it focused and practical.`;
 
     try {
       const response = await this.callGeminiAPI(prompt);
@@ -224,7 +369,7 @@ Return ONLY the JSON object.`;
       console.error('❌ Error generating question response:', error);
       return { 
         action: 'voiceResponse', 
-        response: 'I apologize, but I encountered an error processing your question. Could you please try rephrasing it?',
+        response: 'I had trouble processing that question. Could you try rephrasing it?',
         shouldSpeak: true 
       };
     }
@@ -234,24 +379,16 @@ Return ONLY the JSON object.`;
     console.log('💬 Processing conversation action:', transcript);
     
     const prompt = `
-You are a friendly AI assistant helping with coding. The user is having a casual conversation.
+You are a friendly coding assistant. Respond naturally and briefly.
 
-User message: "${transcript}"
+Message: "${transcript}"
 
-Respond naturally and helpfully. Return a JSON object:
+Return JSON:
 {
   "action": "voiceResponse",
-  "response": "your friendly response here",
+  "response": "your friendly response (under 50 words)",
   "shouldSpeak": true
-}
-
-Keep responses:
-- Warm and conversational
-- Brief (under 100 words for voice)
-- Helpful when possible
-- Professional but friendly
-
-Return ONLY the JSON object.`;
+}`;
 
     try {
       const response = await this.callGeminiAPI(prompt);
@@ -262,21 +399,23 @@ Return ONLY the JSON object.`;
       console.error('❌ Error generating conversation response:', error);
       return { 
         action: 'voiceResponse', 
-        response: 'Hello! I\'m here to help you with coding. What would you like to work on?',
+        response: 'Hello! I\'m here to help you with coding.',
         shouldSpeak: true 
       };
     }
   }
 
+  // Simplified main command processor
   async processCommand(transcript, editorContext) {
     console.log('🎤 Processing voice command:', transcript);
     console.log('📁 Editor context:', editorContext);
     
     try {
-      // First, determine what type of action this is
+      // Determine what the user wants to do
       const actionType = await this.determineActionType(transcript, editorContext);
+      console.log('🎯 Action type:', actionType);
       
-      // Route to appropriate specialist agent
+      // Route to the appropriate handler
       switch (actionType.actionType) {
         case 'code_action':
           return await this.processCodeAction(transcript, editorContext);
@@ -287,6 +426,9 @@ Return ONLY the JSON object.`;
         case 'navigation':
           return await this.processNavigationAction(transcript, editorContext);
         
+        case 'format':
+          return await this.processFormatAction(transcript, editorContext);
+        
         case 'question':
           return await this.processQuestionAction(transcript, editorContext);
         
@@ -296,7 +438,7 @@ Return ONLY the JSON object.`;
         default:
           return { 
             action: 'voiceResponse', 
-            response: 'I\'m not sure how to help with that. Could you try rephrasing your request?',
+            response: 'I\'m not sure how to help with that. Could you be more specific?',
             shouldSpeak: true 
           };
       }
@@ -304,8 +446,33 @@ Return ONLY the JSON object.`;
       console.error('❌ Error processing command:', error);
       return { 
         action: 'voiceResponse', 
-        response: 'I encountered an error processing your request. Please try again.',
+        response: 'I encountered an error. Please try again.',
         shouldSpeak: true 
+      };
+    }
+  }
+
+  // Simple JSON parsing for metadata responses
+  parseSimpleJsonResponse(text) {
+    try {
+      let cleanText = text.trim();
+      cleanText = cleanText.replace(/```json\s*/g, '').replace(/```\s*/g, '');
+      
+      const jsonStart = cleanText.indexOf('{');
+      const jsonEnd = cleanText.lastIndexOf('}');
+      if (jsonStart !== -1 && jsonEnd !== -1) {
+        cleanText = cleanText.slice(jsonStart, jsonEnd + 1);
+      }
+      
+      cleanText = cleanText.replace(/,\s*}/g, '}').replace(/,\s*]/g, ']');
+      return JSON.parse(cleanText);
+      
+    } catch (error) {
+      console.error('❌ Simple JSON parsing failed:', error);
+      return {
+        actionType: 'conversation',
+        confidence: 0.7,
+        reasoning: 'fallback parsing'
       };
     }
   }
@@ -317,28 +484,27 @@ Return ONLY the JSON object.`;
     try {
       console.log(`🔄 Calling Gemini API (attempt ${retryCount + 1}/${maxRetries + 1})`);
       
-      // Create abort controller for timeout
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), timeout);
 
-      const response = await fetch(`${this.apiUrl}?key=${this.apiKey}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          contents: [{
-            parts: [{ text: prompt }]
-          }],
-          generationConfig: {
-            temperature: 0.2,
-            topK: 1,
-            topP: 0.8,
-            maxOutputTokens: 1024,
-          }
-        }),
-        signal: controller.signal
-      });
+          const response = await fetch(`${this.apiUrl}?key=${this.apiKey}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        contents: [{
+          parts: [{ text: prompt }]
+        }],
+        generationConfig: {
+          temperature: 0.2,
+          topK: 1,
+          topP: 0.8,
+          maxOutputTokens: 2048, // Increased for longer code responses
+        }
+      }),
+      signal: controller.signal
+    });
 
       clearTimeout(timeoutId);
 
@@ -346,7 +512,6 @@ Return ONLY the JSON object.`;
         const errorData = await response.text();
         console.error('Gemini API error:', response.status, errorData);
         
-        // Handle specific error codes
         if (response.status === 429 && retryCount < maxRetries) {
           console.log('⏳ Rate limited, retrying in 2 seconds...');
           await new Promise(resolve => setTimeout(resolve, 2000));
@@ -390,65 +555,125 @@ Return ONLY the JSON object.`;
     try {
       console.log('🔍 Parsing response:', text.substring(0, 200) + '...');
       
-      // Clean the text first
       let cleanText = text.trim();
       
-      // Remove markdown code blocks if present
+      // Remove markdown code blocks
       cleanText = cleanText.replace(/```json\s*/g, '').replace(/```\s*/g, '');
       
-      // Try to find JSON in the response
-      const jsonMatches = [
-        cleanText.match(/\{[\s\S]*\}/), // Standard JSON
-        cleanText.match(/\[[\s\S]*\]/), // Array JSON
-      ].filter(Boolean);
+      // Try to fix truncated JSON by finding the outermost braces
+      const firstBrace = cleanText.indexOf('{');
+      const lastBrace = cleanText.lastIndexOf('}');
       
-      for (const match of jsonMatches) {
+      if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+        cleanText = cleanText.slice(firstBrace, lastBrace + 1);
+      }
+      
+      // Try multiple parsing strategies
+      const parsingStrategies = [
+        // Strategy 1: Direct parse
+        () => JSON.parse(cleanText),
+        
+        // Strategy 2: Fix common JSON issues and parse
+        () => {
+          let fixedText = cleanText
+            // Fix trailing commas
+            .replace(/,\s*}/g, '}')
+            .replace(/,\s*]/g, ']')
+            // Fix incomplete strings at the end
+            .replace(/"\s*$/, '"}')
+            // Handle escaped newlines
+            .replace(/\\n/g, '\\n');
+          return JSON.parse(fixedText);
+        },
+        
+        // Strategy 3: Extract complete fields even from truncated JSON
+        () => {
+          const result = {};
+          
+          // Extract action
+          const actionMatch = cleanText.match(/"action":\s*"([^"]+)"/);
+          if (actionMatch) result.action = actionMatch[1];
+          
+          // Extract description  
+          const descMatch = cleanText.match(/"description":\s*"([^"]+)"/);
+          if (descMatch) result.description = descMatch[1];
+          
+          // Extract code (handling multiline strings)
+          const codeMatch = cleanText.match(/"code":\s*"([\s\S]*?)"\s*(?:,|\})/);
+          if (codeMatch) {
+            result.code = codeMatch[1]
+              .replace(/\\n/g, '\n')
+              .replace(/\\"/g, '"')
+              .replace(/\\\\/g, '\\');
+          }
+          
+          // Extract line
+          const lineMatch = cleanText.match(/"line":\s*(\d+)/);
+          if (lineMatch) result.line = parseInt(lineMatch[1]);
+          
+          // Extract response for voice responses
+          const responseMatch = cleanText.match(/"response":\s*"([^"]+)"/);
+          if (responseMatch) {
+            result.response = responseMatch[1];
+            result.shouldSpeak = true;
+          }
+          
+          // Ensure we have minimum required fields
+          if (result.action) {
+                         // Add default description if missing
+             if (!result.description) {
+               if (result.action === 'insertCode' || result.action === 'replaceCode') {
+                 result.description = 'Generated code';
+               } else if (result.action === 'voiceResponse') {
+                 result.description = 'Voice response';
+               }
+             }
+            
+                         // For code actions, ensure we have code
+             if (['insertCode', 'replaceCode', 'createClass'].includes(result.action) && !result.code) {
+              // Try to extract from a different pattern
+              const altCodeMatch = cleanText.match(/def\s+[\s\S]*?(?=\n\s*"|\n\s*})/);
+              if (altCodeMatch) {
+                result.code = altCodeMatch[0];
+              } else {
+                // Fallback - convert to voice response explaining the issue
+                return {
+                  action: 'voiceResponse',
+                  response: 'I generated some code but had trouble formatting it properly. Could you try asking again?',
+                  shouldSpeak: true
+                };
+              }
+            }
+            
+            return result;
+          }
+          
+          throw new Error('No action field found');
+        }
+      ];
+      
+      // Try each strategy
+      for (let i = 0; i < parsingStrategies.length; i++) {
         try {
-          const parsed = JSON.parse(match[0]);
-          console.log('✅ Successfully parsed JSON:', parsed);
-          return parsed;
+          const result = parsingStrategies[i]();
+          console.log(`✅ Successfully parsed with strategy ${i + 1}:`, result);
+          return result;
         } catch (e) {
-          console.log('⚠️ Failed to parse match:', match[0]);
+          console.log(`⚠️ Strategy ${i + 1} failed:`, e.message);
           continue;
         }
       }
       
-      // If no valid JSON found, try to extract from common patterns
-      const patterns = [
-        /"action":\s*"([^"]+)"/,
-        /"response":\s*"([^"]+)"/,
-        /"line":\s*(\d+)/
-      ];
+      throw new Error('All parsing strategies failed');
       
-      let fallbackObject = {};
-      for (const pattern of patterns) {
-        const match = cleanText.match(pattern);
-        if (match) {
-          if (pattern.source.includes('action')) {
-            fallbackObject.action = match[1];
-          } else if (pattern.source.includes('response')) {
-            fallbackObject.response = match[1];
-            fallbackObject.shouldSpeak = true;
-          } else if (pattern.source.includes('line')) {
-            fallbackObject.line = parseInt(match[1]);
-          }
-        }
-      }
-      
-      if (Object.keys(fallbackObject).length > 0) {
-        console.log('🔧 Using fallback parsing:', fallbackObject);
-        return fallbackObject;
-      }
-      
-      throw new Error('No valid JSON or parseable content found');
     } catch (error) {
       console.error('❌ Failed to parse response:', error);
-      console.error('Raw text:', text);
+      console.error('Raw text:', text.substring(0, 500));
       
-      // Return a safe fallback
+      // Emergency fallback
       return {
         action: 'voiceResponse',
-        response: 'I had trouble understanding that request. Could you please try rephrasing it?',
+        response: 'I had trouble processing that request. Could you try breaking it down into simpler steps?',
         shouldSpeak: true
       };
     }

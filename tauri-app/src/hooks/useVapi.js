@@ -54,7 +54,7 @@ const useVapi = (publicKey, assistantId) => {
               );
               
               if (!isAssistantGreeting && transcript.length > 1) {
-                setTranscript(message.transcript);
+            setTranscript(message.transcript);
               } else {
                 console.log('🚫 Filtered out assistant greeting or too short:', transcript);
               }
