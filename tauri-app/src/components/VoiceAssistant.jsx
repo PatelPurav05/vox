@@ -11,12 +11,14 @@ const VoiceAssistant = ({ editor }) => {
   const [status, setStatus] = useState('');
   const [audioLevel, setAudioLevel] = useState(0);
   const [isMonitoring, setIsMonitoring] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
   const geminiService = useRef(null);
   const statusTimeout = useRef(null);
   const audioContextRef = useRef(null);
   const analyserRef = useRef(null);
   const streamRef = useRef(null);
   const animationFrameRef = useRef(null);
+  const speechSynthesisRef = useRef(null);
 
   // Auto-hide status after 3 seconds
   const showStatus = (message) => {
@@ -56,6 +58,57 @@ const VoiceAssistant = ({ editor }) => {
 
   const { isListening, transcript, error, toggleListening, testAudioCapture } = useVapi(vapiKey, assistantId);
 
+  // Get rich editor context
+  const getEditorContext = () => {
+    if (!editor || !editor.getModel()) {
+      return {
+        fileName: 'untitled',
+        language: 'javascript',
+        cursorLine: 1,
+        totalLines: 0,
+        currentContent: '',
+        selectedText: '',
+        cursorColumn: 1
+      };
+    }
+
+    const model = editor.getModel();
+    const position = editor.getPosition();
+    const selection = editor.getSelection();
+    
+    // Get current content (limit to avoid API limits)
+    const currentContent = model.getValue();
+    
+    // Get selected text if any
+    const selectedText = selection && !selection.isEmpty() 
+      ? model.getValueInRange(selection) 
+      : '';
+
+    // Get surrounding context (current line + 5 lines before/after)
+    const currentLine = position.lineNumber;
+    const startContextLine = Math.max(1, currentLine - 5);
+    const endContextLine = Math.min(model.getLineCount(), currentLine + 5);
+    const contextRange = {
+      startLineNumber: startContextLine,
+      startColumn: 1,
+      endLineNumber: endContextLine,
+      endColumn: model.getLineMaxColumn(endContextLine)
+    };
+    const surroundingContext = model.getValueInRange(contextRange);
+
+    return {
+      fileName: model.uri?.path || 'untitled',
+      language: model.getLanguageId() || 'javascript',
+      cursorLine: currentLine,
+      cursorColumn: position.column,
+      totalLines: model.getLineCount(),
+      currentContent: currentContent.length > 3000 ? currentContent.substring(0, 3000) + '...' : currentContent,
+      selectedText: selectedText,
+      surroundingContext: surroundingContext,
+      hasSelection: selectedText.length > 0
+    };
+  };
+
   // Process new transcripts
   useEffect(() => {
     if (transcript && transcript !== lastTranscript) {
@@ -63,6 +116,66 @@ const VoiceAssistant = ({ editor }) => {
       processVoiceCommand(transcript);
     }
   }, [transcript]);
+
+  // Text-to-speech functionality
+  const speakText = (text) => {
+    return new Promise((resolve) => {
+      // Cancel any existing speech
+      if (speechSynthesisRef.current) {
+        speechSynthesis.cancel();
+      }
+
+      if (!window.speechSynthesis) {
+        console.warn('Speech synthesis not supported');
+        resolve();
+        return;
+      }
+
+      const utterance = new SpeechSynthesisUtterance(text);
+      speechSynthesisRef.current = utterance;
+      
+      // Configure voice settings
+      utterance.rate = 0.9;
+      utterance.pitch = 1;
+      utterance.volume = 0.8;
+      
+      // Find a good voice (prefer English)
+      const voices = speechSynthesis.getVoices();
+      const preferredVoice = voices.find(voice => 
+        voice.lang.startsWith('en') && !voice.name.includes('Google')
+      ) || voices[0];
+      
+      if (preferredVoice) {
+        utterance.voice = preferredVoice;
+      }
+
+      utterance.onstart = () => {
+        setIsSpeaking(true);
+        console.log('🗣️ Started speaking:', text.substring(0, 50) + '...');
+      };
+
+      utterance.onend = () => {
+        setIsSpeaking(false);
+        console.log('✅ Finished speaking');
+        resolve();
+      };
+
+      utterance.onerror = (event) => {
+        setIsSpeaking(false);
+        console.error('❌ Speech error:', event.error);
+        resolve();
+      };
+
+      // Ensure voices are loaded
+      if (voices.length === 0) {
+        speechSynthesis.addEventListener('voiceschanged', () => {
+          speechSynthesis.speak(utterance);
+        }, { once: true });
+      } else {
+        speechSynthesis.speak(utterance);
+      }
+    });
+  };
 
   // Real-time audio level monitoring
   const startAudioMonitoring = async () => {
@@ -254,50 +367,78 @@ const VoiceAssistant = ({ editor }) => {
   const processVoiceCommand = async (command) => {
     if (!geminiService.current || !editor) return;
 
-    showStatus(`Processing: "${command}"`);
+    showStatus(`🤔 Processing: "${command}"`);
 
-    // Get editor context
-    const position = editor.getPosition();
-    const model = editor.getModel();
-    const context = {
-      fileName: model?.uri?.path || 'untitled',
-      language: model?.getLanguageId() || 'javascript',
-      cursorLine: position.lineNumber,
-      totalLines: model?.getLineCount() || 0
-    };
+    // Get rich editor context
+    const context = getEditorContext();
+    console.log('📄 Rich editor context:', context);
 
-    // Process with Gemini
-    const action = await geminiService.current.processCommand(command, context);
-    
-    // Execute action
-    executeAction(action);
+    try {
+      // Process with enhanced Gemini service
+      const action = await geminiService.current.processCommand(command, context);
+      console.log('🎬 Action to execute:', action);
+      
+      // Execute the action
+      await executeAction(action);
+    } catch (error) {
+      console.error('❌ Error processing voice command:', error);
+      showStatus(`❌ Error: ${error.message}`);
+    }
   };
 
-  const executeAction = (action) => {
+  const executeAction = async (action) => {
     if (!editor) return;
 
     switch (action.action) {
+      case 'voiceResponse':
+        // Handle voice-only responses
+        showStatus(`🗣️ ${action.response.substring(0, 50)}...`);
+        if (action.shouldSpeak) {
+          await speakText(action.response);
+        }
+        break;
+
       case 'goToLine':
         editor.setPosition({ lineNumber: action.line, column: 1 });
         editor.revealLineInCenter(action.line);
-        showStatus(`Moved to line ${action.line}`);
+        showStatus(`📍 Moved to line ${action.line}`);
+        break;
+
+      case 'goToTop':
+        editor.setPosition({ lineNumber: 1, column: 1 });
+        editor.revealLineInCenter(1);
+        showStatus('⬆️ Moved to top');
+        break;
+
+      case 'goToBottom':
+        const model = editor.getModel();
+        const lastLine = model.getLineCount();
+        editor.setPosition({ lineNumber: lastLine, column: 1 });
+        editor.revealLineInCenter(lastLine);
+        showStatus('⬇️ Moved to bottom');
+        break;
+
+      case 'findText':
+        // Use Monaco's find functionality
+        editor.getAction('actions.find').run();
+        showStatus(`🔍 Opening find dialog for: ${action.searchText}`);
         break;
 
       case 'insertCode':
+        const insertLine = action.line || editor.getPosition().lineNumber;
         editor.executeEdits('voice-assistant', [{
           range: {
-            startLineNumber: action.line,
+            startLineNumber: insertLine,
             startColumn: 1,
-            endLineNumber: action.line,
+            endLineNumber: insertLine,
             endColumn: 1
           },
           text: action.code + '\n'
         }]);
-        showStatus('Code inserted');
+        showStatus(`✅ ${action.description || 'Code inserted'}`);
         break;
 
       case 'deleteLines':
-        const model = editor.getModel();
         editor.executeEdits('voice-assistant', [{
           range: {
             startLineNumber: action.startLine,
@@ -307,33 +448,49 @@ const VoiceAssistant = ({ editor }) => {
           },
           text: ''
         }]);
-        showStatus(`Deleted lines ${action.startLine}-${action.endLine}`);
+        showStatus(`🗑️ Deleted lines ${action.startLine}-${action.endLine}`);
+        break;
+
+      case 'replaceCode':
+        editor.executeEdits('voice-assistant', [{
+          range: {
+            startLineNumber: action.startLine,
+            startColumn: 1,
+            endLineNumber: action.endLine,
+            endColumn: editor.getModel().getLineMaxColumn(action.endLine)
+          },
+          text: action.newCode
+        }]);
+        showStatus(`🔄 ${action.description || 'Code replaced'}`);
         break;
 
       case 'createFunction':
         const functionCode = `function ${action.name}(${action.params.join(', ')}) {\n  // TODO: Implement\n}\n`;
+        const functionLine = action.line || editor.getPosition().lineNumber;
         editor.executeEdits('voice-assistant', [{
           range: {
-            startLineNumber: action.line,
+            startLineNumber: functionLine,
             startColumn: 1,
-            endLineNumber: action.line,
+            endLineNumber: functionLine,
             endColumn: 1
           },
           text: functionCode
         }]);
-        showStatus(`Created function ${action.name}`);
+        showStatus(`🔧 Created function ${action.name}`);
         break;
 
       case 'error':
-        showStatus(`Error: ${action.message}`);
+        showStatus(`❌ Error: ${action.message}`);
         break;
 
       default:
-        showStatus('Unknown action');
+        showStatus(`❓ Unknown action: ${action.action}`);
     }
 
-    // Focus editor
-    editor.focus();
+    // Focus editor after any action
+    if (action.action !== 'voiceResponse') {
+      editor.focus();
+    }
   };
 
   const handleMicClick = () => {
@@ -352,7 +509,9 @@ const VoiceAssistant = ({ editor }) => {
       return;
     }
     
-    toggleListening();
+    // Get editor context and pass it to VAPI
+    const editorContext = getEditorContext();
+    toggleListening(editorContext);
   };
 
   const testMicrophone = async () => {
@@ -373,14 +532,23 @@ const VoiceAssistant = ({ editor }) => {
     }
   };
 
+  // Stop speaking if needed
+  const stopSpeaking = () => {
+    if (speechSynthesis.speaking) {
+      speechSynthesis.cancel();
+      setIsSpeaking(false);
+      showStatus('🤐 Stopped speaking');
+    }
+  };
+
   return (
     <div className="voice-assistant">
       <button 
-        className={`mic-button ${isListening ? 'listening' : ''}`}
+        className={`mic-button ${isListening ? 'listening' : ''} ${isSpeaking ? 'speaking' : ''}`}
         onClick={handleMicClick}
         title={isListening ? 'Stop listening' : 'Start voice command'}
         style={{
-          backgroundColor: isListening ? '#4CAF50' : '#333',
+          backgroundColor: isListening ? '#4CAF50' : isSpeaking ? '#FF9800' : '#333',
           color: 'white',
           border: 'none',
           borderRadius: '50%',
@@ -394,14 +562,46 @@ const VoiceAssistant = ({ editor }) => {
           alignItems: 'center',
           justifyContent: 'center',
           boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
-          transition: 'all 0.3s ease'
+          transition: 'all 0.3s ease',
+          animation: isListening ? 'pulse 1.5s infinite' : isSpeaking ? 'glow 2s infinite' : 'none'
         }}
       >
         <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M12 14.5C13.66 14.5 15 13.16 15 11.5V6C15 4.34 13.66 3 12 3C10.34 3 9 4.34 9 6V11.5C9 13.16 10.34 14.5 12 14.5Z" />
-          <path d="M17 11.5C17 14.53 14.53 17 11.5 17C8.47 17 6 14.53 6 11.5H4C4 15.24 6.89 18.35 10.5 18.92V22H13.5V18.92C17.11 18.35 20 15.24 20 11.5H17Z" />
+          {isSpeaking ? (
+            // Speaker icon when speaking
+            <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+          ) : (
+            // Microphone icon when listening/idle
+            <>
+              <path d="M12 14.5C13.66 14.5 15 13.16 15 11.5V6C15 4.34 13.66 3 12 3C10.34 3 9 4.34 9 6V11.5C9 13.16 10.34 14.5 12 14.5Z" />
+              <path d="M17 11.5C17 14.53 14.53 17 11.5 17C8.47 17 6 14.53 6 11.5H4C4 15.24 6.89 18.35 10.5 18.92V22H13.5V18.92C17.11 18.35 20 15.24 20 11.5H17Z" />
+            </>
+          )}
         </svg>
       </button>
+
+      {/* Stop speaking button when speaking */}
+      {isSpeaking && (
+        <button 
+          onClick={stopSpeaking}
+          title="Stop speaking"
+          style={{
+            position: 'fixed',
+            bottom: '90px',
+            right: '20px',
+            padding: '8px 12px',
+            backgroundColor: '#f44336',
+            color: 'white',
+            border: 'none',
+            borderRadius: '20px',
+            cursor: 'pointer',
+            fontSize: '12px',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.3)'
+          }}
+        >
+          🤐 Stop
+        </button>
+      )}
 
       {/* Audio Level Monitor Button */}
       <button 
@@ -498,7 +698,7 @@ const VoiceAssistant = ({ editor }) => {
       {error && (
         <div className="error-bar" style={{
           position: 'fixed',
-          bottom: '100px',
+          bottom: '140px',
           right: '20px',
           backgroundColor: '#f44336',
           color: 'white',
@@ -512,41 +712,20 @@ const VoiceAssistant = ({ editor }) => {
         </div>
       )}
 
-      <div className="voice-controls">
-        <button
-          onClick={isListening ? toggleListening : handleMicClick}
-          className={`voice-button ${isListening ? 'listening' : ''}`}
-        >
-          🎤 {isListening ? 'Stop' : 'Start'} Voice Assistant
-        </button>
+      {/* Add CSS animations */}
+      <style jsx>{`
+        @keyframes pulse {
+          0% { transform: scale(1); }
+          50% { transform: scale(1.1); }
+          100% { transform: scale(1); }
+        }
         
-        <button
-          onClick={isMonitoring ? stopAudioMonitoring : toggleAudioMonitoring}
-          className={`voice-button ${isMonitoring ? 'monitoring' : ''}`}
-        >
-          📊 {isMonitoring ? 'Stop' : 'Monitor'} Audio
-        </button>
-        
-        <button
-          onClick={diagnoseAudioIssues}
-          className="voice-button diagnostic"
-        >
-          🔍 Diagnose Audio
-        </button>
-        
-        {isMonitoring && (
-          <div className="audio-level-container">
-            <div className="audio-level-label">Audio Level:</div>
-            <div className="audio-level-bar">
-              <div 
-                className="audio-level-fill" 
-                style={{ width: `${Math.min(audioLevel * 2, 100)}%` }}
-              ></div>
-            </div>
-            <div className="audio-level-value">{Math.round(audioLevel)}</div>
-          </div>
-        )}
-      </div>
+        @keyframes glow {
+          0% { box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+          50% { box-shadow: 0 4px 20px rgba(255, 152, 0, 0.5); }
+          100% { box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+        }
+      `}</style>
     </div>
   );
 };

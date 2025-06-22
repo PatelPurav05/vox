@@ -120,7 +120,7 @@ const useVapi = (publicKey, assistantId) => {
     }
   };
 
-  const toggleListening = async () => {
+  const toggleListening = async (editorContext = null) => {
     if (!assistantId) {
       setError('Assistant ID not configured - add your VAPI assistant ID to config');
       return;
@@ -152,7 +152,13 @@ const useVapi = (publicKey, assistantId) => {
         console.log('🚀 Starting VAPI call...');
         console.log('📞 Assistant ID:', assistantId);
         
-        // Start VAPI call - let VAPI handle the microphone directly
+        // Log the context for debugging but don't pass it to VAPI yet
+        // (We'll handle context in the Gemini processing instead)
+        if (editorContext) {
+          console.log('📝 Editor context available:', editorContext);
+        }
+        
+        // Start VAPI call - back to the working approach
         await vapiRef.current.start(assistantId);
       }
     } catch (err) {
