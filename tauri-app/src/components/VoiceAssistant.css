@@ -64,4 +64,18 @@
 
 .error-bar {
   background-color: #ff0044;
+}
+
+/* Search result highlighting */
+.search-result {
+  background-color: #ffeb3b !important;
+  color: #333 !important;
+  border: 1px solid #fbc02d;
+}
+
+.current-search-result {
+  background-color: #ff9800 !important;
+  color: #fff !important;
+  border: 2px solid #f57c00;
+  box-shadow: 0 0 4px rgba(255, 152, 0, 0.6);
 } 

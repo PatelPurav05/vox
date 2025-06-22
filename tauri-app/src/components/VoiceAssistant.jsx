@@ -13,6 +13,18 @@ const VoiceAssistant = ({ editor }) => {
   const [isMonitoring, setIsMonitoring] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  
+  // Search state for voice navigation
+  const [searchState, setSearchState] = useState({
+    query: '',
+    results: [],
+    currentIndex: -1,
+    totalResults: 0
+  });
+
+  // Store decoration IDs for proper cleanup
+  const searchDecorationsRef = useRef([]);
+
   const geminiService = useRef(null);
   const statusTimeout = useRef(null);
   const audioContextRef = useRef(null);
@@ -57,6 +69,19 @@ const VoiceAssistant = ({ editor }) => {
       geminiService.current = new GeminiService(geminiKey);
     }
   }, [geminiKey]);
+
+  // Cleanup search decorations on unmount or editor change
+  useEffect(() => {
+    return () => {
+      if (editor && searchDecorationsRef.current.length > 0) {
+        try {
+          editor.deltaDecorations(searchDecorationsRef.current, []);
+        } catch (e) {
+          // Editor might be disposed, ignore
+        }
+      }
+    };
+  }, [editor]);
 
   const { isListening, transcript, error, toggleListening, testAudioCapture } = useVapi(vapiKey, assistantId);
 
@@ -444,6 +469,160 @@ const VoiceAssistant = ({ editor }) => {
     }
   };
 
+  // Search functionality with voice navigation
+  const performSearch = async (searchText) => {
+    if (!editor || !searchText) return;
+
+    const model = editor.getModel();
+    const fullText = model.getValue();
+    
+    // Find all matches
+    const results = [];
+    const regex = new RegExp(searchText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+    let match;
+    
+    while ((match = regex.exec(fullText)) !== null) {
+      const position = model.getPositionAt(match.index);
+      results.push({
+        startLineNumber: position.lineNumber,
+        startColumn: position.column,
+        endLineNumber: position.lineNumber,
+        endColumn: position.column + match[0].length,
+        text: match[0]
+      });
+      
+      // Prevent infinite loop with zero-width matches
+      if (match[0].length === 0) {
+        regex.lastIndex++;
+      }
+    }
+
+    // Update search state
+    setSearchState({
+      query: searchText,
+      results: results,
+      currentIndex: results.length > 0 ? 0 : -1,
+      totalResults: results.length
+    });
+
+    if (results.length > 0) {
+      // Clear any existing decorations first
+      searchDecorationsRef.current = editor.deltaDecorations(searchDecorationsRef.current, []);
+      
+      // Highlight all results
+      const decorations = results.map((result, index) => ({
+        range: result,
+        options: {
+          className: index === 0 ? 'current-search-result' : 'search-result',
+          isWholeLine: false
+        }
+      }));
+      
+      // Store decoration IDs for later cleanup
+      searchDecorationsRef.current = editor.deltaDecorations([], decorations);
+      
+      // Jump to first result
+      editor.setPosition({ 
+        lineNumber: results[0].startLineNumber, 
+        column: results[0].startColumn 
+      });
+      editor.revealLineInCenter(results[0].startLineNumber);
+      
+      showStatus(`🔍 Found ${results.length} results for "${searchText}" - showing result 1`);
+      
+      // Provide voice feedback
+      if (!isListening) {
+        await speakText(`Found ${results.length} results for ${searchText}. Currently at result 1.`);
+      }
+    } else {
+      // Clear any existing decorations if no results found
+      searchDecorationsRef.current = editor.deltaDecorations(searchDecorationsRef.current, []);
+      
+      showStatus(`🔍 No results found for "${searchText}"`);
+      if (!isListening) {
+        await speakText(`No results found for ${searchText}`);
+      }
+    }
+  };
+
+  // Navigate between search results
+  const navigateSearchResults = (direction) => {
+    if (searchState.results.length === 0) {
+      showStatus('❌ No search results to navigate');
+      return;
+    }
+
+    let newIndex = searchState.currentIndex;
+    
+    switch (direction) {
+      case 'next':
+        newIndex = (searchState.currentIndex + 1) % searchState.results.length;
+        break;
+      case 'previous':
+        newIndex = searchState.currentIndex > 0 ? searchState.currentIndex - 1 : searchState.results.length - 1;
+        break;
+      case 'first':
+        newIndex = 0;
+        break;
+      case 'last':
+        newIndex = searchState.results.length - 1;
+        break;
+    }
+
+    // Update current index
+    setSearchState(prev => ({ ...prev, currentIndex: newIndex }));
+
+    // Jump to the result
+    const result = searchState.results[newIndex];
+    editor.setPosition({ 
+      lineNumber: result.startLineNumber, 
+      column: result.startColumn 
+    });
+    editor.revealLineInCenter(result.startLineNumber);
+
+    // Update decorations to highlight current result
+    const decorations = searchState.results.map((res, index) => ({
+      range: res,
+      options: {
+        className: index === newIndex ? 'current-search-result' : 'search-result',
+        isWholeLine: false
+      }
+    }));
+    
+    // Update decorations properly
+    searchDecorationsRef.current = editor.deltaDecorations(searchDecorationsRef.current, decorations);
+
+    const resultNumber = newIndex + 1;
+    showStatus(`🔍 Result ${resultNumber} of ${searchState.totalResults} for "${searchState.query}"`);
+    
+    // Provide voice feedback
+    if (!isListening) {
+      speakText(`Result ${resultNumber} of ${searchState.totalResults}`);
+         }
+   };
+
+  // Clear search results and highlights
+  const clearSearchResults = () => {
+    if (!editor) return;
+    
+    // Clear decorations properly using stored IDs
+    searchDecorationsRef.current = editor.deltaDecorations(searchDecorationsRef.current, []);
+    
+    // Reset search state
+    setSearchState({
+      query: '',
+      results: [],
+      currentIndex: -1,
+      totalResults: 0
+    });
+    
+    showStatus('🔍 Search results cleared');
+    
+    if (!isListening) {
+      speakText('Search results cleared');
+    }
+  };
+
   const executeAction = async (action) => {
     if (!editor) return;
 
@@ -480,9 +659,7 @@ const VoiceAssistant = ({ editor }) => {
         break;
 
       case 'findText':
-        // Use Monaco's find functionality
-        editor.getAction('actions.find').run();
-        showStatus(`🔍 Opening find dialog for: ${action.searchText}`);
+        await performSearch(action.searchText);
         break;
 
       case 'insertCode':
@@ -646,6 +823,27 @@ const VoiceAssistant = ({ editor }) => {
       // Move lines (basic implementation)
       case 'moveLines':
         showStatus('📋 Line moving - feature coming soon!');
+        break;
+
+      // Search navigation
+      case 'nextSearchResult':
+        navigateSearchResults('next');
+        break;
+
+      case 'previousSearchResult':
+        navigateSearchResults('previous');
+        break;
+
+      case 'firstSearchResult':
+        navigateSearchResults('first');
+        break;
+
+      case 'lastSearchResult':
+        navigateSearchResults('last');
+        break;
+
+      case 'clearSearch':
+        clearSearchResults();
         break;
 
       case 'error':
@@ -849,6 +1047,24 @@ const VoiceAssistant = ({ editor }) => {
         </div>
       )}
       
+      {/* Search results indicator */}
+      {searchState.totalResults > 0 && (
+        <div style={{
+          position: 'fixed',
+          bottom: '180px',
+          right: '20px',
+          backgroundColor: '#ff9800',
+          color: 'white',
+          padding: '8px 12px',
+          borderRadius: '6px',
+          fontSize: '12px',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+          border: '1px solid #f57c00'
+        }}>
+          🔍 Search: "{searchState.query}" ({searchState.currentIndex + 1}/{searchState.totalResults})
+        </div>
+      )}
+
       {status && (
         <div className="status-bar" style={{
           position: 'fixed',

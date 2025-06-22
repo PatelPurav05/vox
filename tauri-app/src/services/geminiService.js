@@ -250,11 +250,44 @@ Available actions:
   "description": "moved to bottom"
 }
 
+{
+  "action": "nextSearchResult",
+  "description": "moved to next search result"
+}
+
+{
+  "action": "previousSearchResult",
+  "description": "moved to previous search result"
+}
+
+{
+  "action": "firstSearchResult",
+  "description": "moved to first search result"
+}
+
+{
+  "action": "lastSearchResult",
+  "description": "moved to last search result"
+}
+
+{
+  "action": "clearSearch",
+  "description": "cleared search results"
+}
+
 Examples:
 - "go to line 42" → goToLine with line: 42
 - "move up 5 lines" → moveCursor with direction: "up", count: 5
 - "find the word hello" → findText with searchText: "hello"
 - "go to the end of the line" → moveCursor with direction: "end"
+- "next result" → nextSearchResult
+- "previous result" → previousSearchResult
+- "first result" → firstSearchResult
+- "last result" → lastSearchResult
+- "go to next search result" → nextSearchResult
+- "clear search" → clearSearch
+- "clear search results" → clearSearch
+- "hide search results" → clearSearch
 
 Parse the request and return the appropriate navigation action.`;
 
