@@ -541,6 +541,7 @@ function App() {
 
   const sidebarRef = useRef(null)
   const debugRef = useRef(null)
+  const fileExplorerRef = useRef(null)
 
   // Theme management
   useEffect(() => {
@@ -883,6 +884,29 @@ function App() {
     return languageMap[extension] || 'text'
   }
 
+  // Handle terminal command execution from voice assistant
+  const handleRunTerminalCommand = async (command) => {
+    return new Promise((resolve, reject) => {
+      try {
+        addDebugLog(`Voice Assistant requesting terminal command: ${command}`);
+        
+        // Create a custom event to send the command to the terminal
+        const terminalCommandEvent = new CustomEvent('terminalCommand', {
+          detail: { command }
+        });
+        
+        // Dispatch the event to be picked up by the terminal component
+        document.dispatchEvent(terminalCommandEvent);
+        
+        addDebugLog(`Terminal command dispatched: ${command}`);
+        resolve();
+      } catch (error) {
+        addDebugLog(`Error dispatching terminal command: ${error.message}`, 'error');
+        reject(error);
+      }
+    });
+  }
+
   return (
     <div className="app">
       <div className="app-header">
@@ -919,6 +943,7 @@ function App() {
           style={{ width: sidebarWidth, flexShrink: 0 }}
         >
           <FileExplorer 
+            ref={fileExplorerRef}
             onFileSelect={handleFileSelect}
             onRootPathChange={setRootPath}
             onContextMenu={handleContextMenu}
@@ -958,8 +983,15 @@ function App() {
                   language={getLanguageFromFilename(currentFile)}
                   value={fileContent}
                   onChange={handleEditorChange}
-                  onMount={(editor) => setEditorInstance(editor)}
                   theme={isDarkMode ? "vs-dark" : "vs-light"}
+                  onMount={(editor) => {
+                    setEditorInstance(editor)
+                    console.log('📄 Monaco Editor mounted and ready')
+                    // Focus the editor after it's mounted
+                    setTimeout(() => {
+                      editor.focus()
+                    }, 100)
+                  }}
                   options={{
                     minimap: { enabled: false },
                     fontSize: 14,
@@ -1036,7 +1068,13 @@ function App() {
         targetPath={newFileDialog.targetPath}
       />
 
-      <VoiceAssistant editor={editorInstance} />
+      <VoiceAssistant 
+        editor={editorInstance} 
+        fileExplorerRef={fileExplorerRef}
+        onToggleTerminal={() => setIsTerminalVisible(!isTerminalVisible)}
+        isTerminalVisible={isTerminalVisible}
+        onRunTerminalCommand={handleRunTerminalCommand}
+      />
     </div>
   )
 }

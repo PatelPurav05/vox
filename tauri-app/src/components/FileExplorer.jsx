@@ -1,14 +1,22 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useImperativeHandle, forwardRef } from 'react'
 import { open } from '@tauri-apps/plugin-dialog'
 import { readDir, exists } from '@tauri-apps/plugin-fs'
 import './FileExplorer.css'
 
-const FileExplorer = ({ onFileSelect, onRootPathChange, onContextMenu, currentFile, refreshTrigger }) => {
+const FileExplorer = forwardRef(({ onFileSelect, onRootPathChange, onContextMenu, currentFile, refreshTrigger }, ref) => {
   const [rootPath, setRootPath] = useState(null)
   const [fileTree, setFileTree] = useState([])
   const [expandedDirs, setExpandedDirs] = useState(new Set())
   const [loading, setLoading] = useState(false)
   const [loadingDirs, setLoadingDirs] = useState(new Set()) // Track which directories are loading
+
+  // Expose methods to parent component via ref
+  useImperativeHandle(ref, () => ({
+    selectRootFolder,
+    refreshFileTree,
+    findAndOpenFile,
+    expandDirectoryByName
+  }))
 
   // Helper function to properly join paths
   const joinPath = (dir, name) => {
@@ -271,6 +279,59 @@ const FileExplorer = ({ onFileSelect, onRootPathChange, onContextMenu, currentFi
     return iconMap[extension] || '📄'
   }
 
+  // Find and open a file by name (voice command support)
+  const findAndOpenFile = async (fileName) => {
+    const searchTree = async (items) => {
+      for (const item of items) {
+        if (!item.isDirectory && item.name.toLowerCase().includes(fileName.toLowerCase())) {
+          console.log(`Found file: ${item.name} at ${item.path}`)
+          try {
+            await onFileSelect(item.path)
+            return true
+          } catch (error) {
+            console.error('Error opening file:', error)
+            return false
+          }
+        }
+        if (item.children && item.children.length > 0) {
+          if (await searchTree(item.children)) return true
+        }
+      }
+      return false
+    }
+
+    try {
+      return await searchTree(fileTree)
+    } catch (error) {
+      console.error('Error finding/opening file:', error)
+      return false
+    }
+  }
+
+  // Expand a directory by name (voice command support)
+  const expandDirectoryByName = async (directoryName) => {
+    const searchAndExpandTree = async (items) => {
+      for (const item of items) {
+        if (item.isDirectory && item.name.toLowerCase().includes(directoryName.toLowerCase())) {
+          console.log(`Found directory: ${item.name} at ${item.path}`)
+          await handleDirectoryClick(item.path)
+          return true
+        }
+        if (item.children && item.children.length > 0) {
+          if (await searchAndExpandTree(item.children)) return true
+        }
+      }
+      return false
+    }
+
+    try {
+      return await searchAndExpandTree(fileTree)
+    } catch (error) {
+      console.error('Error expanding directory:', error)
+      return false
+    }
+  }
+
   const renderTree = (items, level = 0) => {
     if (!items || items.length === 0) return null
     
@@ -343,6 +404,8 @@ const FileExplorer = ({ onFileSelect, onRootPathChange, onContextMenu, currentFi
       )}
     </div>
   )
-}
+})
+
+FileExplorer.displayName = 'FileExplorer'
 
 export default FileExplorer 
