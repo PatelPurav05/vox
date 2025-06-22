@@ -166,3 +166,60 @@
 .file-tree::-webkit-scrollbar-thumb:hover {
   background: #4f4f4f;
 } 
+
+[data-theme="light"] .file-explorer {
+  background-color: #ffffff;
+  color: #1e1e1e;
+}
+
+[data-theme="light"] .explorer-header {
+  background-color: #f2f2f2;
+  border-bottom: 1px solid #ccc;
+  color: #333;
+}
+
+[data-theme="light"] .explorer-title {
+  color: #333;
+}
+
+[data-theme="light"] .select-folder-btn {
+  border: 1px solid #aaa;
+  color: #333;
+}
+
+[data-theme="light"] .select-folder-btn:hover {
+  background-color: #e0e0e0;
+}
+
+[data-theme="light"] .file-item:hover {
+  background-color: #f0f0f0;
+}
+
+[data-theme="light"] .file-item.selected {
+  background-color: #d0d0d0;
+  color: #000000;
+}
+
+[data-theme="light"] .empty-folder {
+  color: #666;
+}
+
+[data-theme="light"] .no-folder-selected {
+  color: #888;
+}
+
+[data-theme="light"] .no-folder-selected h3 {
+  color: #444;
+}
+
+[data-theme="light"] .file-tree::-webkit-scrollbar-track {
+  background: #ffffff;
+}
+
+[data-theme="light"] .file-tree::-webkit-scrollbar-thumb {
+  background: #bbb;
+}
+
+[data-theme="light"] .file-tree::-webkit-scrollbar-thumb:hover {
+  background: #999;
+}
