@@ -404,7 +404,7 @@ const VoiceAssistant = ({ editor }) => {
       </button>
 
       {/* Audio Level Monitor Button */}
-      <button 
+      {/* <button 
         onClick={toggleAudioMonitoring}
         title={isMonitoring ? 'Stop audio monitoring' : 'Start audio monitoring'}
         style={{
@@ -421,10 +421,10 @@ const VoiceAssistant = ({ editor }) => {
         }}
       >
         {isMonitoring ? 'Stop Monitor' : 'Monitor Audio'}
-      </button>
+      </button> */}
 
       {/* Simple test button */}
-      <button 
+      {/* <button 
         onClick={testMicrophone}
         title="Test microphone"
         style={{
@@ -441,7 +441,7 @@ const VoiceAssistant = ({ editor }) => {
         }}
       >
         Test Mic
-      </button>
+      </button> */}
 
       {/* Audio Level Display */}
       {isMonitoring && (
@@ -513,7 +513,7 @@ const VoiceAssistant = ({ editor }) => {
       )}
 
       <div className="voice-controls">
-        <button
+        {/* <button
           onClick={isListening ? toggleListening : handleMicClick}
           className={`voice-button ${isListening ? 'listening' : ''}`}
         >
@@ -532,7 +532,7 @@ const VoiceAssistant = ({ editor }) => {
           className="voice-button diagnostic"
         >
           🔍 Diagnose Audio
-        </button>
+        </button> */}
         
         {isMonitoring && (
           <div className="audio-level-container">
