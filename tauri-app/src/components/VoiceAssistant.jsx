@@ -151,7 +151,7 @@ const VoiceAssistant = ({ editor, fileExplorerRef }) => {
       // Debounce processing to avoid multiple rapid calls
       processingTimeout.current = setTimeout(() => {
         console.log('🎯 Processing transcript after debounce:', transcript);
-        processVoiceCommand(transcript);
+      processVoiceCommand(transcript);
       }, 500); // Wait 500ms to ensure user finished speaking
     }
   }, [transcript, isProcessing]);
@@ -444,7 +444,7 @@ const VoiceAssistant = ({ editor, fileExplorerRef }) => {
       while (retryCount <= maxRetries) {
         try {
           action = await geminiService.current.processCommand(command, context);
-          console.log('🎬 Action to execute:', action);
+          console.log('🤖 Gemini returned action:', action);
           break;
         } catch (error) {
           retryCount++;
@@ -461,7 +461,7 @@ const VoiceAssistant = ({ editor, fileExplorerRef }) => {
       
       // Execute the action
       if (action) {
-        await executeAction(action);
+      await executeAction(action);
       }
     } catch (error) {
       console.error('❌ Error processing voice command after retries:', error);
@@ -654,7 +654,7 @@ const VoiceAssistant = ({ editor, fileExplorerRef }) => {
     }
   };
 
-  const openFileByName = (fileName) => {
+  const openFileByName = async (fileName) => {
     if (!fileExplorerRef?.current?.findAndOpenFile) {
       showStatus('❌ File explorer not available');
       if (!isListening) {
@@ -663,18 +663,49 @@ const VoiceAssistant = ({ editor, fileExplorerRef }) => {
       return;
     }
 
-    // This will need to be implemented in FileExplorer
-    const found = fileExplorerRef.current.findAndOpenFile(fileName);
-    
-    if (found) {
-      showStatus(`📄 Opened ${fileName}`);
-      if (!isListening) {
-        speakText(`Opened ${fileName}`);
+    try {
+      const found = await fileExplorerRef.current.findAndOpenFile(fileName);
+      
+      if (found) {
+        showStatus(`📄 Opened ${fileName}`);
+        if (!isListening) {
+          speakText(`Opened ${fileName}`);
+        }
+        
+        // Give the editor time to initialize and then focus it
+        setTimeout(() => {
+          // Try to focus the editor if it's available
+          if (editor) {
+            editor.focus();
+            console.log('📄 Editor focused after file open');
+          } else {
+            // If editor isn't ready yet, try to find the Monaco editor instance
+            const monacoEditor = document.querySelector('.monaco-editor');
+            if (monacoEditor) {
+              monacoEditor.focus();
+              console.log('📄 Monaco editor focused after file open');
+            }
+          }
+        }, 200);
+        
+        // Also try focusing after a longer delay in case the editor takes time to mount
+        setTimeout(() => {
+          if (editor) {
+            editor.focus();
+            console.log('📄 Editor focused after longer delay');
+          }
+        }, 500);
+      } else {
+        showStatus(`❌ File "${fileName}" not found`);
+        if (!isListening) {
+          speakText(`File ${fileName} not found`);
+        }
       }
-    } else {
-      showStatus(`❌ File "${fileName}" not found`);
+    } catch (error) {
+      console.error('Error opening file:', error);
+      showStatus(`❌ Error opening ${fileName}`);
       if (!isListening) {
-        speakText(`File ${fileName} not found`);
+        speakText(`Error opening ${fileName}`);
       }
     }
   };
@@ -727,7 +758,15 @@ const VoiceAssistant = ({ editor, fileExplorerRef }) => {
   };
 
   const executeAction = async (action) => {
-    if (!editor) return;
+    console.log('🎬 Executing action:', action.action, 'with data:', action);
+    
+    // Allow file explorer actions even when no editor is open
+    const fileExplorerActions = ['openFolder', 'openFile', 'expandDirectory', 'refreshExplorer'];
+    
+    if (!editor && !fileExplorerActions.includes(action.action)) {
+      console.log('⚠️ No editor available for action:', action.action);
+      return;
+    }
 
     switch (action.action) {
       case 'voiceResponse':
@@ -843,13 +882,13 @@ const VoiceAssistant = ({ editor, fileExplorerRef }) => {
         const indentString = '    '.repeat(indentLevels); // 4 spaces per level
         
         for (let line = indentStart; line <= indentEnd; line++) {
-          editor.executeEdits('voice-assistant', [{
-            range: {
+        editor.executeEdits('voice-assistant', [{
+          range: {
               startLineNumber: line,
-              startColumn: 1,
+            startColumn: 1,
               endLineNumber: line,
-              endColumn: 1
-            },
+            endColumn: 1
+          },
             text: indentString
           }]);
         }
@@ -987,7 +1026,7 @@ const VoiceAssistant = ({ editor, fileExplorerRef }) => {
 
       case 'openFile':
         if (action.fileName) {
-          openFileByName(action.fileName);
+          await openFileByName(action.fileName);
         } else {
           showStatus('❌ No filename specified');
           if (!isListening) {
@@ -1011,36 +1050,7 @@ const VoiceAssistant = ({ editor, fileExplorerRef }) => {
         refreshFileExplorer();
         break;
 
-      // Undo/Redo functionality
-      case 'undo':
-        if (editor.getModel().canUndo()) {
-          editor.trigger('voice-assistant', 'undo', null);
-          showStatus('↩️ Undid last action');
-          if (!isListening) {
-            speakText('Undid last action');
-          }
-        } else {
-          showStatus('❌ Nothing to undo');
-          if (!isListening) {
-            speakText('Nothing to undo');
-          }
-        }
-        break;
 
-      case 'redo':
-        if (editor.getModel().canRedo()) {
-          editor.trigger('voice-assistant', 'redo', null);
-          showStatus('↪️ Redid last action');
-          if (!isListening) {
-            speakText('Redid last action');
-          }
-        } else {
-          showStatus('❌ Nothing to redo');
-          if (!isListening) {
-            speakText('Nothing to redo');
-          }
-        }
-        break;
 
       case 'error':
         showStatus(`❌ Error: ${action.message}`);
@@ -1050,8 +1060,10 @@ const VoiceAssistant = ({ editor, fileExplorerRef }) => {
         showStatus(`❓ Unknown action: ${action.action}`);
     }
 
-    // Focus editor after any action
-    if (action.action !== 'voiceResponse') {
+    // Focus editor after editor-related actions only
+    const editorActions = ['goToLine', 'goToTop', 'goToBottom', 'findText', 'insertCode', 'deleteLines', 'replaceCode', 'moveCursor', 'indent', 'outdent', 'insertAt', 'addNewLine', 'formatCode', 'undo', 'redo'];
+    
+    if (editor && editorActions.includes(action.action)) {
       editor.focus();
     }
   };
@@ -1260,7 +1272,7 @@ const VoiceAssistant = ({ editor, fileExplorerRef }) => {
           🔍 Search: "{searchState.query}" ({searchState.currentIndex + 1}/{searchState.totalResults})
         </div>
       )}
-
+      
       {status && (
         <div className="status-bar" style={{
           position: 'fixed',

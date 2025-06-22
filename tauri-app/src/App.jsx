@@ -420,7 +420,14 @@ function App() {
                   language={getLanguageFromFilename(currentFile)}
                   value={fileContent}
                   onChange={handleEditorChange}
-                  onMount={(editor) => setEditorInstance(editor)}
+                  onMount={(editor) => {
+                    setEditorInstance(editor)
+                    console.log('📄 Monaco Editor mounted and ready')
+                    // Focus the editor after it's mounted
+                    setTimeout(() => {
+                      editor.focus()
+                    }, 100)
+                  }}
                   theme="vs-dark"
                   options={{
                     minimap: { enabled: false },

@@ -280,22 +280,32 @@ const FileExplorer = forwardRef(({ onFileSelect, onRootPathChange, onContextMenu
   }
 
   // Find and open a file by name (voice command support)
-  const findAndOpenFile = (fileName) => {
-    const searchTree = (items) => {
+  const findAndOpenFile = async (fileName) => {
+    const searchTree = async (items) => {
       for (const item of items) {
         if (!item.isDirectory && item.name.toLowerCase().includes(fileName.toLowerCase())) {
           console.log(`Found file: ${item.name} at ${item.path}`)
-          onFileSelect(item.path)
-          return true
+          try {
+            await onFileSelect(item.path)
+            return true
+          } catch (error) {
+            console.error('Error opening file:', error)
+            return false
+          }
         }
         if (item.children && item.children.length > 0) {
-          if (searchTree(item.children)) return true
+          if (await searchTree(item.children)) return true
         }
       }
       return false
     }
 
-    return searchTree(fileTree)
+    try {
+      return await searchTree(fileTree)
+    } catch (error) {
+      console.error('Error finding/opening file:', error)
+      return false
+    }
   }
 
   // Expand a directory by name (voice command support)
