@@ -310,46 +310,147 @@ Return ONLY the JSON object.`;
     }
   }
 
-  async callGeminiAPI(prompt) {
-    const response = await fetch(`${this.apiUrl}?key=${this.apiKey}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        contents: [{
-          parts: [{ text: prompt }]
-        }],
-        generationConfig: {
-          temperature: 0.1,
-          topK: 1,
-          topP: 1,
-          maxOutputTokens: 2048,
+  async callGeminiAPI(prompt, retryCount = 0) {
+    const maxRetries = 2;
+    const timeout = 15000; // 15 seconds
+
+    try {
+      console.log(`🔄 Calling Gemini API (attempt ${retryCount + 1}/${maxRetries + 1})`);
+      
+      // Create abort controller for timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+      const response = await fetch(`${this.apiUrl}?key=${this.apiKey}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          contents: [{
+            parts: [{ text: prompt }]
+          }],
+          generationConfig: {
+            temperature: 0.2,
+            topK: 1,
+            topP: 0.8,
+            maxOutputTokens: 1024,
+          }
+        }),
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const errorData = await response.text();
+        console.error('Gemini API error:', response.status, errorData);
+        
+        // Handle specific error codes
+        if (response.status === 429 && retryCount < maxRetries) {
+          console.log('⏳ Rate limited, retrying in 2 seconds...');
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          return this.callGeminiAPI(prompt, retryCount + 1);
         }
-      })
-    });
+        
+        if (response.status === 500 && retryCount < maxRetries) {
+          console.log('⏳ Server error, retrying in 1 second...');
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          return this.callGeminiAPI(prompt, retryCount + 1);
+        }
+        
+        throw new Error(`Gemini API error: ${response.status} - ${errorData}`);
+      }
 
-    if (!response.ok) {
-      const errorData = await response.text();
-      console.error('Gemini API error:', response.status, errorData);
-      throw new Error(`Gemini API error: ${response.status}`);
+      const data = await response.json();
+      
+      if (!data.candidates || !data.candidates[0] || !data.candidates[0].content) {
+        throw new Error('Invalid response format from Gemini API');
+      }
+      
+      return data.candidates[0].content.parts[0].text;
+      
+    } catch (error) {
+      if (error.name === 'AbortError') {
+        console.error('❌ Gemini API timeout');
+        throw new Error('Request timed out - please try again');
+      }
+      
+      if (retryCount < maxRetries) {
+        console.log(`⏳ Retrying API call (${retryCount + 1}/${maxRetries})`);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        return this.callGeminiAPI(prompt, retryCount + 1);
+      }
+      
+      throw error;
     }
-
-    const data = await response.json();
-    return data.candidates[0].content.parts[0].text;
   }
 
   parseJsonResponse(text) {
     try {
-      // Try to extract JSON from the response
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        return JSON.parse(jsonMatch[0]);
+      console.log('🔍 Parsing response:', text.substring(0, 200) + '...');
+      
+      // Clean the text first
+      let cleanText = text.trim();
+      
+      // Remove markdown code blocks if present
+      cleanText = cleanText.replace(/```json\s*/g, '').replace(/```\s*/g, '');
+      
+      // Try to find JSON in the response
+      const jsonMatches = [
+        cleanText.match(/\{[\s\S]*\}/), // Standard JSON
+        cleanText.match(/\[[\s\S]*\]/), // Array JSON
+      ].filter(Boolean);
+      
+      for (const match of jsonMatches) {
+        try {
+          const parsed = JSON.parse(match[0]);
+          console.log('✅ Successfully parsed JSON:', parsed);
+          return parsed;
+        } catch (e) {
+          console.log('⚠️ Failed to parse match:', match[0]);
+          continue;
+        }
       }
-      throw new Error('No JSON found in response');
+      
+      // If no valid JSON found, try to extract from common patterns
+      const patterns = [
+        /"action":\s*"([^"]+)"/,
+        /"response":\s*"([^"]+)"/,
+        /"line":\s*(\d+)/
+      ];
+      
+      let fallbackObject = {};
+      for (const pattern of patterns) {
+        const match = cleanText.match(pattern);
+        if (match) {
+          if (pattern.source.includes('action')) {
+            fallbackObject.action = match[1];
+          } else if (pattern.source.includes('response')) {
+            fallbackObject.response = match[1];
+            fallbackObject.shouldSpeak = true;
+          } else if (pattern.source.includes('line')) {
+            fallbackObject.line = parseInt(match[1]);
+          }
+        }
+      }
+      
+      if (Object.keys(fallbackObject).length > 0) {
+        console.log('🔧 Using fallback parsing:', fallbackObject);
+        return fallbackObject;
+      }
+      
+      throw new Error('No valid JSON or parseable content found');
     } catch (error) {
-      console.error('Failed to parse JSON:', text);
-      throw error;
+      console.error('❌ Failed to parse response:', error);
+      console.error('Raw text:', text);
+      
+      // Return a safe fallback
+      return {
+        action: 'voiceResponse',
+        response: 'I had trouble understanding that request. Could you please try rephrasing it?',
+        shouldSpeak: true
+      };
     }
   }
 }

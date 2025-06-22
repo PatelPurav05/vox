@@ -169,16 +169,18 @@ For VAPI mode (when working), configure your assistant with:
 
 1. **Go to VAPI Dashboard**: https://dashboard.vapi.ai
 2. **Edit your Assistant**: Find assistant ID `c3692736-a8e7-4f52-b377-9926aa91d30a`
-3. **System Message**: Use this configuration to prevent automatic greetings:
+3. **System Message**: Use this EXACT configuration to prevent loops:
    ```
-   You are a silent coding assistant. Do NOT greet the user automatically. 
-   Only respond when the user asks a specific question or gives a command.
-   Wait for the user to speak first. Keep all responses under 20 words.
-   Focus on code editing, navigation, and programming tasks only.
+   You are a silent coding assistant. DO NOT SAY ANYTHING when the call starts. 
+   DO NOT greet the user with "hello" or "how may I help you" or similar phrases.
+   WAIT for the user to speak first. Only respond to direct questions.
+   Keep responses under 10 words. Focus only on code editing tasks.
+   If asked about code generation, say "I'll help you code that" and nothing more.
    ```
 
-4. **First Message**: Leave this BLANK or set to empty string `""` 
-5. **End Call Phrase**: Set to something like "stop listening" or "end call"
+4. **First Message**: Set to BLANK `""` (very important!)
+5. **End Call Phrase**: Set to "stop listening" or "goodbye"
+6. **Voice Settings**: Choose a quiet, calm voice (avoid energetic voices)
 
 ### Step 2: Current Protections
 

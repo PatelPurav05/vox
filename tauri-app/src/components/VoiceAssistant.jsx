@@ -12,6 +12,7 @@ const VoiceAssistant = ({ editor }) => {
   const [audioLevel, setAudioLevel] = useState(0);
   const [isMonitoring, setIsMonitoring] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   const geminiService = useRef(null);
   const statusTimeout = useRef(null);
   const audioContextRef = useRef(null);
@@ -19,6 +20,7 @@ const VoiceAssistant = ({ editor }) => {
   const streamRef = useRef(null);
   const animationFrameRef = useRef(null);
   const speechSynthesisRef = useRef(null);
+  const processingTimeout = useRef(null);
 
   // Auto-hide status after 3 seconds
   const showStatus = (message) => {
@@ -109,13 +111,23 @@ const VoiceAssistant = ({ editor }) => {
     };
   };
 
-  // Process new transcripts
+  // Process new transcripts with debouncing
   useEffect(() => {
-    if (transcript && transcript !== lastTranscript) {
+    if (transcript && transcript !== lastTranscript && !isProcessing) {
       setLastTranscript(transcript);
-      processVoiceCommand(transcript);
+      
+      // Clear any existing timeout
+      if (processingTimeout.current) {
+        clearTimeout(processingTimeout.current);
+      }
+      
+      // Debounce processing to avoid multiple rapid calls
+      processingTimeout.current = setTimeout(() => {
+        console.log('🎯 Processing transcript after debounce:', transcript);
+        processVoiceCommand(transcript);
+      }, 500); // Wait 500ms to ensure user finished speaking
     }
-  }, [transcript]);
+  }, [transcript, isProcessing]);
 
   // Text-to-speech functionality
   const speakText = (text) => {
@@ -365,8 +377,18 @@ const VoiceAssistant = ({ editor }) => {
   };
 
   const processVoiceCommand = async (command) => {
-    if (!geminiService.current || !editor) return;
+    if (!geminiService.current || !editor) {
+      console.log('⚠️ Cannot process - missing dependencies');
+      return;
+    }
 
+    // Prevent multiple concurrent processing
+    if (isProcessing) {
+      console.log('⏳ Already processing a command, skipping...');
+      return;
+    }
+
+    setIsProcessing(true);
     showStatus(`🤔 Processing: "${command}"`);
 
     // Get rich editor context
@@ -374,15 +396,51 @@ const VoiceAssistant = ({ editor }) => {
     console.log('📄 Rich editor context:', context);
 
     try {
-      // Process with enhanced Gemini service
-      const action = await geminiService.current.processCommand(command, context);
-      console.log('🎬 Action to execute:', action);
+      // Process with enhanced Gemini service with retry logic
+      let action;
+      let retryCount = 0;
+      const maxRetries = 2;
+
+      while (retryCount <= maxRetries) {
+        try {
+          action = await geminiService.current.processCommand(command, context);
+          console.log('🎬 Action to execute:', action);
+          break;
+        } catch (error) {
+          retryCount++;
+          console.log(`⚠️ Attempt ${retryCount} failed:`, error.message);
+          
+          if (retryCount <= maxRetries) {
+            showStatus(`🔄 Retrying... (${retryCount}/${maxRetries})`);
+            await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
+          } else {
+            throw error;
+          }
+        }
+      }
       
       // Execute the action
-      await executeAction(action);
+      if (action) {
+        await executeAction(action);
+      }
     } catch (error) {
-      console.error('❌ Error processing voice command:', error);
-      showStatus(`❌ Error: ${error.message}`);
+      console.error('❌ Error processing voice command after retries:', error);
+      
+      // More helpful error messages
+      let errorMessage = 'Something went wrong';
+      if (error.message?.includes('API key')) {
+        errorMessage = 'API key issue - check your Gemini configuration';
+      } else if (error.message?.includes('network')) {
+        errorMessage = 'Network error - check your connection';
+      } else if (error.message?.includes('quota')) {
+        errorMessage = 'API quota exceeded - try again later';
+      } else {
+        errorMessage = `Error: ${error.message}`;
+      }
+      
+      showStatus(`❌ ${errorMessage}`);
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -547,17 +605,18 @@ const VoiceAssistant = ({ editor }) => {
   return (
     <div className="voice-assistant">
       <button 
-        className={`mic-button ${isListening ? 'listening' : ''} ${isSpeaking ? 'speaking' : ''}`}
+        className={`mic-button ${isListening ? 'listening' : ''} ${isSpeaking ? 'speaking' : ''} ${isProcessing ? 'processing' : ''}`}
         onClick={handleMicClick}
-        title={isListening ? 'Stop listening' : 'Start voice command'}
+        title={isListening ? 'Stop listening' : isProcessing ? 'Processing command...' : 'Start voice command'}
+        disabled={isProcessing}
         style={{
-          backgroundColor: isListening ? '#4CAF50' : isSpeaking ? '#FF9800' : '#333',
+          backgroundColor: isListening ? '#4CAF50' : isSpeaking ? '#FF9800' : isProcessing ? '#2196F3' : '#333',
           color: 'white',
           border: 'none',
           borderRadius: '50%',
           width: '60px',
           height: '60px',
-          cursor: 'pointer',
+          cursor: isProcessing ? 'not-allowed' : 'pointer',
           position: 'fixed',
           bottom: '20px',
           right: '20px',
@@ -566,7 +625,8 @@ const VoiceAssistant = ({ editor }) => {
           justifyContent: 'center',
           boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
           transition: 'all 0.3s ease',
-          animation: isListening ? 'pulse 1.5s infinite' : isSpeaking ? 'glow 2s infinite' : 'none'
+          animation: isListening ? 'pulse 1.5s infinite' : isSpeaking ? 'glow 2s infinite' : isProcessing ? 'spin 1s linear infinite' : 'none',
+          opacity: isProcessing ? 0.8 : 1
         }}
       >
         <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
@@ -727,6 +787,11 @@ const VoiceAssistant = ({ editor }) => {
           0% { box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
           50% { box-shadow: 0 4px 20px rgba(255, 152, 0, 0.5); }
           100% { box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+        }
+        
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
         }
       `}</style>
     </div>
