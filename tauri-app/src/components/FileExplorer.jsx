@@ -299,7 +299,7 @@ const FileExplorer = forwardRef(({ onFileSelect, onRootPathChange, onContextMenu
   }
 
   // Expand a directory by name (voice command support)
-  const expandDirectoryByName = (directoryName) => {
+  const expandDirectoryByName = async (directoryName) => {
     const searchAndExpandTree = async (items) => {
       for (const item of items) {
         if (item.isDirectory && item.name.toLowerCase().includes(directoryName.toLowerCase())) {
@@ -314,7 +314,12 @@ const FileExplorer = forwardRef(({ onFileSelect, onRootPathChange, onContextMenu
       return false
     }
 
-    return searchAndExpandTree(fileTree)
+    try {
+      return await searchAndExpandTree(fileTree)
+    } catch (error) {
+      console.error('Error expanding directory:', error)
+      return false
+    }
   }
 
   const renderTree = (items, level = 0) => {

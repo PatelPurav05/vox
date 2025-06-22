@@ -29,10 +29,12 @@ Return ONLY this JSON:
 Categories:
 - code_action: Add/create code (write function, add variable, insert code)
 - edit: Modify existing code (delete, replace, fix, change)
-- navigation: Move cursor, go to line, find text
+- navigation: Move cursor, go to line, find text, open files/folders, file explorer operations
 - format: Indent, outdent, reformat, organize
 - question: Ask about code or explain something
 - conversation: General chat
+
+${editorContext.hasEditor ? '' : 'NOTE: No editor is currently open - prioritize file explorer operations (navigation category).'}
 
 Be precise - do what the user asks, nothing more.`;
 

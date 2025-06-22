@@ -95,7 +95,8 @@ const VoiceAssistant = ({ editor, fileExplorerRef }) => {
         totalLines: 0,
         currentContent: '',
         selectedText: '',
-        cursorColumn: 1
+        cursorColumn: 1,
+        hasEditor: false
       };
     }
 
@@ -132,7 +133,8 @@ const VoiceAssistant = ({ editor, fileExplorerRef }) => {
       currentContent: currentContent.length > 3000 ? currentContent.substring(0, 3000) + '...' : currentContent,
       selectedText: selectedText,
       surroundingContext: surroundingContext,
-      hasSelection: selectedText.length > 0
+      hasSelection: selectedText.length > 0,
+      hasEditor: true
     };
   };
 
@@ -402,8 +404,21 @@ const VoiceAssistant = ({ editor, fileExplorerRef }) => {
   };
 
   const processVoiceCommand = async (command) => {
-    if (!geminiService.current || !editor) {
-      console.log('⚠️ Cannot process - missing dependencies');
+    if (!geminiService.current) {
+      console.log('⚠️ Cannot process - Gemini service not available');
+      return;
+    }
+
+    // Allow file explorer commands even when no editor is open
+    const isFileExplorerCommand = command.toLowerCase().includes('open') || 
+                                 command.toLowerCase().includes('folder') || 
+                                 command.toLowerCase().includes('file') ||
+                                 command.toLowerCase().includes('expand') ||
+                                 command.toLowerCase().includes('refresh');
+
+    if (!editor && !isFileExplorerCommand) {
+      console.log('⚠️ Cannot process - no editor available and not a file explorer command');
+      showStatus('❌ Please open a file first or use file explorer commands');
       return;
     }
 
@@ -664,7 +679,7 @@ const VoiceAssistant = ({ editor, fileExplorerRef }) => {
     }
   };
 
-  const expandDirectoryByName = (directoryName) => {
+  const expandDirectoryByName = async (directoryName) => {
     if (!fileExplorerRef?.current?.expandDirectoryByName) {
       showStatus('❌ File explorer not available');
       if (!isListening) {
@@ -673,17 +688,25 @@ const VoiceAssistant = ({ editor, fileExplorerRef }) => {
       return;
     }
 
-    const found = fileExplorerRef.current.expandDirectoryByName(directoryName);
-    
-    if (found) {
-      showStatus(`📁 Expanded ${directoryName} directory`);
-      if (!isListening) {
-        speakText(`Expanded ${directoryName} directory`);
+    try {
+      const found = await fileExplorerRef.current.expandDirectoryByName(directoryName);
+      
+      if (found) {
+        showStatus(`📁 Expanded ${directoryName} directory`);
+        if (!isListening) {
+          speakText(`Expanded ${directoryName} directory`);
+        }
+      } else {
+        showStatus(`❌ Directory "${directoryName}" not found`);
+        if (!isListening) {
+          speakText(`Directory ${directoryName} not found`);
+        }
       }
-    } else {
-      showStatus(`❌ Directory "${directoryName}" not found`);
+    } catch (error) {
+      console.error('Error expanding directory:', error);
+      showStatus(`❌ Error expanding ${directoryName} directory`);
       if (!isListening) {
-        speakText(`Directory ${directoryName} not found`);
+        speakText(`Error expanding ${directoryName} directory`);
       }
     }
   };
@@ -975,7 +998,7 @@ const VoiceAssistant = ({ editor, fileExplorerRef }) => {
 
       case 'expandDirectory':
         if (action.directoryName) {
-          expandDirectoryByName(action.directoryName);
+          await expandDirectoryByName(action.directoryName);
         } else {
           showStatus('❌ No directory name specified');
           if (!isListening) {
