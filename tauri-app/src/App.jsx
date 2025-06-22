@@ -6,6 +6,7 @@ import { open } from '@tauri-apps/plugin-dialog'
 import Terminal from './components/Terminal'
 import ContextMenu from './components/ContextMenu'
 import NewFileDialog from './components/NewFileDialog'
+import VoiceAssistant from './components/VoiceAssistant'
 import './App.css'
 
 function App() {
@@ -31,6 +32,7 @@ function App() {
     isVisible: false,
     targetPath: null
   })
+  const [editorInstance, setEditorInstance] = useState(null)
 
   const sidebarRef = useRef(null)
   const debugRef = useRef(null)
@@ -416,6 +418,7 @@ function App() {
                   language={getLanguageFromFilename(currentFile)}
                   value={fileContent}
                   onChange={handleEditorChange}
+                  onMount={(editor) => setEditorInstance(editor)}
                   theme="vs-dark"
                   options={{
                     minimap: { enabled: false },
@@ -491,6 +494,8 @@ function App() {
         onCreateFile={handleCreateFileWithContent}
         targetPath={newFileDialog.targetPath}
       />
+
+      <VoiceAssistant editor={editorInstance} />
     </div>
   )
 }
