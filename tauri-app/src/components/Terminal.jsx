@@ -658,6 +658,34 @@ const Terminal = ({ isVisible, onToggle, workingDirectory }) => {
     }
   }, [workingDirectory]);
 
+  // Listen for terminal command events from voice assistant
+  useEffect(() => {
+    const handleTerminalCommand = (event) => {
+      const { command } = event.detail;
+      console.log('📟 Terminal received voice command:', command);
+      
+      if (xtermRef.current && isVisible) {
+        // Write the command to the terminal with visual indicators
+        xtermRef.current.writeln('');
+        xtermRef.current.writeln('\x1b[36m🎤 Voice Command:\x1b[0m ' + command);
+        xtermRef.current.writeln('');
+        
+        // Execute the command
+        executeCommand(command, xtermRef.current);
+      } else {
+        console.log('⚠️ Terminal not available for voice command execution');
+      }
+    };
+
+    // Add event listener
+    document.addEventListener('terminalCommand', handleTerminalCommand);
+
+    // Cleanup
+    return () => {
+      document.removeEventListener('terminalCommand', handleTerminalCommand);
+    };
+  }, [isVisible]);
+
   const showPrompt = (terminal) => {
     // Show current directory in prompt for better visual feedback - use ref for immediate updates
     const currentDirectory = currentDirRef.current || currentDir;

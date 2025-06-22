@@ -160,3 +160,50 @@ For VAPI mode (when working), configure your assistant with:
 - ✅ **Editor integration**
 - ✅ **Voice responses** (VAPI mode only)
 - ⏳ **Advanced voice commands** (future enhancement) 
+
+## Preventing Feedback Loops
+
+**IMPORTANT:** To prevent the "hello, how may I help you" loop, configure your VAPI assistant properly:
+
+### Step 1: Configure VAPI Assistant (Dashboard)
+
+1. **Go to VAPI Dashboard**: https://dashboard.vapi.ai
+2. **Edit your Assistant**: Find assistant ID `c3692736-a8e7-4f52-b377-9926aa91d30a`
+3. **System Message**: Use this EXACT configuration to prevent loops:
+   ```
+   You are a silent coding assistant. DO NOT SAY ANYTHING when the call starts. 
+   DO NOT greet the user with "hello" or "how may I help you" or similar phrases.
+   WAIT for the user to speak first. Only respond to direct questions.
+   Keep responses under 10 words. Focus only on code editing tasks.
+   If asked about code generation, say "I'll help you code that" and nothing more.
+   ```
+
+4. **First Message**: Set to BLANK `""` (very important!)
+5. **End Call Phrase**: Set to "stop listening" or "goodbye"
+6. **Voice Settings**: Choose a quiet, calm voice (avoid energetic voices)
+
+### Step 2: Current Protections
+
+The code now includes these anti-loop protections:
+- ✅ **Local TTS disabled** when VAPI is active
+- ✅ **Assistant greeting filter** - Common greetings are blocked from processing
+- ✅ **Role-based filtering** - Only user messages trigger actions
+
+### Troubleshooting Loops
+
+If you still get loops:
+
+1. **Check VAPI Dashboard**: Ensure "First Message" is empty
+2. **Check System Message**: Make sure it says "do NOT greet automatically"
+3. **Monitor Console**: Look for `🚫 Filtered out assistant greeting` messages
+4. **Try Push-to-Talk**: Use the microphone button as push-to-talk instead of continuous
+
+### Loop Detection Messages
+
+Watch for these console messages:
+```
+🚫 Filtered out assistant greeting to prevent loop: hello how may i help you
+🔇 Skipping TTS - VAPI is active (preventing feedback loop)
+👤 User said: [actual user command]
+🤖 Assistant said: [vapi response - ignored]
+``` 

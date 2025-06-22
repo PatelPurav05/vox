@@ -34,8 +34,33 @@ const useVapi = (publicKey, assistantId) => {
         
         if (message.type === 'transcript') {
           if (message.role === 'user') {
-            console.log('👤 User said:', message.transcript);
+            // Only process FINAL transcripts to avoid processing partial/incomplete speech
+            if (message.transcriptType === 'final') {
+              console.log('👤 User said (FINAL):', message.transcript);
+              
+              // Filter out common assistant greetings to prevent feedback loops
+              const assistantGreetings = [
+                'hello how may i help you',
+                'hello, how may i help you',
+                'how can i help you',
+                'how may i assist you',
+                'hello i\'m here to help',
+                'hello! i\'m here to help you with coding'
+              ];
+              
+              const transcript = message.transcript.toLowerCase().trim();
+              const isAssistantGreeting = assistantGreetings.some(greeting => 
+                transcript.includes(greeting) || greeting.includes(transcript)
+              );
+              
+              if (!isAssistantGreeting && transcript.length > 1) {
             setTranscript(message.transcript);
+              } else {
+                console.log('🚫 Filtered out assistant greeting or too short:', transcript);
+              }
+            } else {
+              console.log('👤 User speaking (partial):', message.transcript);
+            }
           } else if (message.role === 'assistant') {
             console.log('🤖 Assistant said:', message.transcript);
           }
@@ -120,7 +145,7 @@ const useVapi = (publicKey, assistantId) => {
     }
   };
 
-  const toggleListening = async () => {
+  const toggleListening = async (editorContext = null) => {
     if (!assistantId) {
       setError('Assistant ID not configured - add your VAPI assistant ID to config');
       return;
@@ -152,7 +177,13 @@ const useVapi = (publicKey, assistantId) => {
         console.log('🚀 Starting VAPI call...');
         console.log('📞 Assistant ID:', assistantId);
         
-        // Start VAPI call - let VAPI handle the microphone directly
+        // Log the context for debugging but don't pass it to VAPI yet
+        // (We'll handle context in the Gemini processing instead)
+        if (editorContext) {
+          console.log('📝 Editor context available:', editorContext);
+        }
+        
+        // Start VAPI call - back to the working approach
         await vapiRef.current.start(assistantId);
       }
     } catch (err) {
