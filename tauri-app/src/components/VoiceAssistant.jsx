@@ -1294,7 +1294,7 @@ const VoiceAssistant = ({ editor, fileExplorerRef, onToggleTerminal, isTerminalV
       )}
 
       {/* Audio Level Monitor Button */}
-      <button 
+      {/* <button 
         onClick={toggleAudioMonitoring}
         title={isMonitoring ? 'Stop audio monitoring' : 'Start audio monitoring'}
         style={{
@@ -1311,10 +1311,10 @@ const VoiceAssistant = ({ editor, fileExplorerRef, onToggleTerminal, isTerminalV
         }}
       >
         {isMonitoring ? 'Stop Monitor' : 'Monitor Audio'}
-      </button>
+      </button> */}
 
       {/* Simple test button */}
-      <button 
+      {/* <button 
         onClick={testMicrophone}
         title="Test microphone"
         style={{
@@ -1331,7 +1331,7 @@ const VoiceAssistant = ({ editor, fileExplorerRef, onToggleTerminal, isTerminalV
         }}
       >
         Test Mic
-      </button>
+      </button> */}
 
       {/* Audio Level Display */}
       {isMonitoring && (
@@ -1419,7 +1419,7 @@ const VoiceAssistant = ({ editor, fileExplorerRef, onToggleTerminal, isTerminalV
           {error}
         </div>
       )}
-
+      
       {/* Add CSS animations */}
       <style jsx>{`
         @keyframes pulse {
